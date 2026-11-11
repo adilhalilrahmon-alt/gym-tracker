@@ -1,7 +1,7 @@
 // Cloud sync with Supabase: email-code sign-in, full pull + incremental push.
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import { useSyncExternalStore } from 'react';
-import { SUPABASE_KEY, SUPABASE_URL } from './config';
+import { APP_URL, SUPABASE_KEY, SUPABASE_URL } from './config';
 import { getState, onLocalChange, setState } from './store';
 import { collectPush, mergeRemote, type Remote } from './merge';
 
@@ -78,17 +78,20 @@ export function syncNow(): Promise<void> {
   return running;
 }
 
-export async function sendCode(email: string) {
+export async function signIn(email: string, password: string) {
   if (!client) throw new Error('Cloud sync is not set up yet');
-  const { error } = await client.auth.signInWithOtp({ email, options: { shouldCreateUser: true } });
-  if (error) throw error;
+  const { error } = await client.auth.signInWithPassword({ email, password });
+  if (error) throw new Error(error.message === 'Email not confirmed' ? 'Confirm your email first: tap the link we sent, then sign in here.' : error.message);
+  writeMeta({ ...readMeta(), lastPushAt: '' }); // first sign-in on this device: upload everything
 }
 
-export async function verifyCode(email: string, token: string) {
+/** Returns true when an email confirmation is needed before signing in. */
+export async function signUp(email: string, password: string): Promise<boolean> {
   if (!client) throw new Error('Cloud sync is not set up yet');
-  const { error } = await client.auth.verifyOtp({ email, token, type: 'email' });
+  const { data, error } = await client.auth.signUp({ email, password, options: { emailRedirectTo: APP_URL } });
   if (error) throw error;
-  writeMeta({ ...readMeta(), lastPushAt: '' }); // first sign-in on this device: upload everything
+  if (data.session) writeMeta({ ...readMeta(), lastPushAt: '' });
+  return !data.session;
 }
 
 export async function signOut() {

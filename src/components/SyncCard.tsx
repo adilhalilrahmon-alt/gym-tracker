@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { sendCode, signOut, syncNow, useSyncStatus, verifyCode } from '../lib/sync';
+import { signIn, signOut, signUp, syncNow, useSyncStatus } from '../lib/sync';
 
 function ago(iso: string | null) {
   if (!iso) return 'never';
@@ -12,16 +12,18 @@ function ago(iso: string | null) {
 
 export function SyncCard() {
   const st = useSyncStatus();
+  const [mode, setMode] = useState<'in' | 'up'>('in');
   const [email, setEmail] = useState('');
-  const [code, setCode] = useState('');
-  const [sent, setSent] = useState(false);
+  const [pw, setPw] = useState('');
   const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState('');
   const [err, setErr] = useState('');
 
   const run = async (fn: () => Promise<void>) => {
-    setBusy(true); setErr('');
+    setBusy(true); setErr(''); setMsg('');
     try { await fn(); } catch (e) { setErr((e as Error).message); } finally { setBusy(false); }
   };
+  const valid = /^\S+@\S+\.\S+$/.test(email) && pw.length >= 8;
 
   return (
     <section className="card col" style={{ gap: 10 }}>
@@ -39,30 +41,31 @@ export function SyncCard() {
         </>
       )}
 
-      {st.configured && !st.email && !sent && (
-        <>
-          <span className="small muted">Sign in once to back up and sync. We email you a code; no password.</span>
+      {st.configured && !st.email && (
+        <form className="col" style={{ gap: 10 }} onSubmit={(e) => {
+          e.preventDefault();
+          if (!valid) return;
+          void run(async () => {
+            if (mode === 'in') await signIn(email, pw);
+            else if (await signUp(email, pw)) { setMode('in'); setMsg('Check your email and tap the confirmation link, then come back and sign in here.'); }
+          });
+        }}>
+          <span className="small muted">{mode === 'in' ? 'Sign in to back up and sync across devices.' : 'Create your account. You only do this once.'}</span>
           <div className="field">
             <label htmlFor="sync-email">Email</label>
             <input id="sync-email" className="input" type="email" inputMode="email" autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value.trim())} />
           </div>
-          <button className="btn" disabled={busy || !/^\S+@\S+\.\S+$/.test(email)} onClick={() => run(async () => { await sendCode(email); setSent(true); })}>{busy ? 'Sending…' : 'Email me a code'}</button>
-        </>
-      )}
-
-      {st.configured && !st.email && sent && (
-        <>
-          <span className="small muted">Enter the code we sent to {email}.</span>
           <div className="field">
-            <label htmlFor="sync-code">Code</label>
-            <input id="sync-code" className="input" inputMode="numeric" autoComplete="one-time-code" value={code} onChange={(e) => setCode(e.target.value.replace(/\D/g, ''))} />
+            <label htmlFor="sync-pw">Password{mode === 'up' ? ' (8+ characters)' : ''}</label>
+            <input id="sync-pw" className="input" type="password" autoComplete={mode === 'in' ? 'current-password' : 'new-password'} value={pw} onChange={(e) => setPw(e.target.value)} />
           </div>
           <div className="row">
-            <button className="btn" disabled={busy || code.length < 6} onClick={() => run(() => verifyCode(email, code))}>{busy ? 'Checking…' : 'Verify'}</button>
-            <button className="btn ghost" onClick={() => { setSent(false); setCode(''); }}>Change email</button>
+            <button className="btn" type="submit" disabled={busy || !valid}>{busy ? 'One sec…' : mode === 'in' ? 'Sign in' : 'Create account'}</button>
+            <button className="btn ghost" type="button" onClick={() => { setMode(mode === 'in' ? 'up' : 'in'); setErr(''); setMsg(''); }}>{mode === 'in' ? 'New here?' : 'Have an account?'}</button>
           </div>
-        </>
+        </form>
       )}
+      {msg && <span className="small up">{msg}</span>}
       {err && <span className="small warn">{err}</span>}
     </section>
   );
