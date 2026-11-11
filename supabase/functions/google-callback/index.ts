@@ -9,7 +9,15 @@ import { createClient } from 'npm:@supabase/supabase-js@2';
 const CLIENT_ID = '658463936124-m49do2s4ha8012iao5k5vj64nrjvgt9h.apps.googleusercontent.com';
 const CLIENT_SECRET = Deno.env.get('GOOGLE_CLIENT_SECRET') ?? '';
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
-const SERVICE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+function serverKey(): string {
+  try {
+    const keys = JSON.parse(Deno.env.get('SUPABASE_SECRET_KEYS') ?? '{}');
+    const k = keys.default ?? Object.values(keys)[0];
+    if (k) return k as string;
+  } catch { /* fall back */ }
+  return Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+}
+const SERVICE_KEY = serverKey();
 const REDIRECT_URI = `${SUPABASE_URL}/functions/v1/google-callback`;
 const APP_URL = 'https://adilhalilrahmon-alt.github.io/gym-tracker/';
 const SCOPE = 'https://www.googleapis.com/auth/googlehealth.health_metrics_and_measurements.readonly';
