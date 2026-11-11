@@ -169,8 +169,8 @@ async function syncWeights(userId: string, token: string, since: string) {
     if (v.weight == null) continue;
     const ex = byDate.get(date);
     const same = ex && ex.source === 'scale' && Number(ex.weight) === v.weight && (ex.body_fat == null ? v.bodyFat == null : Number(ex.body_fat) === v.bodyFat);
-    const manualNewer = ex && ex.source === 'manual' && Date.parse(ex.updated_at) > v.t;
-    if (same || manualNewer) continue;
+    // The scale is the source of truth: it replaces a typed-in weight for the same day.
+    if (same) continue;
     rows.push({ user_id: userId, date, weight: v.weight, body_fat: v.bodyFat ?? null, source: 'scale', deleted: false, updated_at: now });
   }
   if (rows.length) {
