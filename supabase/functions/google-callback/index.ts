@@ -156,9 +156,10 @@ async function syncWeights(userId: string, token: string, since: string) {
   for (const p of bf) {
     const s = p.bodyFat?.sampleTime; const v = firstNumber(p.bodyFat, ['percentage', 'bodyFatPercentage']);
     if (!s || v == null) continue;
-    const d = localDate(s);
-    const cur = days.get(d) ?? { t: Date.parse(s.physicalTime) };
-    if (cur.bodyFat == null) days.set(d, { ...cur, bodyFat: Math.round(v * 10) / 10 });
+    const d = localDate(s); const t = Date.parse(s.physicalTime);
+    const cur = days.get(d) ?? { t };
+    const bfT = (cur as { bfT?: number }).bfT;
+    if (bfT == null || t < bfT) days.set(d, { ...cur, bodyFat: Math.round(v * 10) / 10, bfT: t } as typeof cur);
   }
   if (!days.size) return 0;
   const { data: existing } = await admin.from('weigh_ins').select('date,weight,body_fat,source,updated_at').eq('user_id', userId).in('date', [...days.keys()]);
