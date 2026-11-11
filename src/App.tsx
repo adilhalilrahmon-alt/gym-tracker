@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { googleRedirectResult, syncAllNow } from './lib/sync';
-import { useStore } from './lib/store';
+import { actions, useStore } from './lib/store';
 import { setHeightCm } from './lib/avatar';
 import { Home } from './screens/Home';
 import { Logger } from './screens/Logger';
@@ -24,6 +24,11 @@ export function App() {
   const [weight, setWeight] = useState(false);
   const active = useStore((s) => s.active);
   const [notice, setNotice] = useState<string | null>(null);
+  const tz = useStore((s) => s.settings.tz);
+  useEffect(() => {
+    const here = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    if (here && here !== tz) actions.updateSettings({ tz: here });
+  }, [tz]);
   useEffect(() => {
     const r = googleRedirectResult();
     if (!r) return;

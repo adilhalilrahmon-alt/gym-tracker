@@ -22,6 +22,8 @@ export function Home({ onWeight, onGo }: { onWeight: () => void; onGo: (t: 'prog
   const bf = navyBodyFat(m, s.settings.heightCm);
   const thisWeek = weekCount(s.workouts, weekStart(new Date()));
   const weighedToday = latest?.date === today;
+  const recentNote = s.insights.find((i) => Date.now() - Date.parse(i.created_at) < 3 * 864e5);
+  const latestNote = recentNote ? (recentNote.kind === 'weekly' ? `Week in review: ${recentNote.text.split('\n')[0]}` : recentNote.text) : null;
 
   return (
     <main className="screen">
@@ -34,7 +36,7 @@ export function Home({ onWeight, onGo }: { onWeight: () => void; onGo: (t: 'prog
 
       <div className="card row" style={{ alignItems: 'center', gap: 12 }}>
         <button onClick={() => onGo('me')} aria-label="Open your avatar" style={{ background: 'none', border: 'none', padding: 0 }}>
-          <FrontAvatar m={m} bf={bf} height={150} id="home" />
+          <FrontAvatar m={m} bf={bf} height={150} id="home" look={s.settings.avatar} />
         </button>
         <div className="col" style={{ flex: 1, gap: 6 }}>
           <span className="eyebrow">{weighedToday ? 'This morning' : latest ? `Last: ${parseDate(latest.date).toLocaleDateString('en-CA', { month: 'short', day: 'numeric' })}` : 'Weight'}</span>
@@ -69,7 +71,7 @@ export function Home({ onWeight, onGo }: { onWeight: () => void; onGo: (t: 'prog
         <span style={{ flexShrink: 0 }}>{Icon.star}</span>
         <div className="col">
           <span className="eyebrow" style={{ color: 'var(--gold)' }}>Coach</span>
-          <p style={{ margin: 0, lineHeight: 1.4 }}>{coachNote(s, today)}</p>
+          <p style={{ margin: 0, lineHeight: 1.4, whiteSpace: 'pre-line' }}>{latestNote ?? coachNote(s, today)}</p>
         </div>
       </div>
     </main>

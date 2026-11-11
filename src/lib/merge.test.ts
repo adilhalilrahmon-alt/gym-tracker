@@ -10,6 +10,7 @@ const base = (): State => ({
   settingsUpdatedAt: '2026-11-11T12:00:00Z',
   active: null,
   tombstones: [],
+  insights: [],
 });
 
 describe('merge', () => {

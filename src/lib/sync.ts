@@ -2,7 +2,7 @@
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import { useSyncExternalStore } from 'react';
 import { APP_URL, SUPABASE_KEY, SUPABASE_URL } from './config';
-import { getState, onLocalChange, setState } from './store';
+import { actions, getState, onLocalChange, setState } from './store';
 import { collectPush, mergeRemote, type Remote } from './merge';
 
 export interface GoogleStatus {
@@ -62,6 +62,8 @@ export function syncNow(): Promise<void> {
       if (err) throw err;
       const remote: Remote = { workouts: w.data ?? [], weigh_ins: wi.data ?? [], measurements: m.data ?? [], settings: st.data ?? null };
       setState((s) => mergeRemote(s, remote), { remote: true });
+      const ins = await client.from('insights').select('id,kind,ref,text,created_at').order('created_at', { ascending: false }).limit(200);
+      if (!ins.error) actions.setInsights(ins.data ?? []);
 
       const meta = readMeta();
       const pushStart = new Date().toISOString();
@@ -172,4 +174,73 @@ export function googleRedirectResult(): string | null {
 export async function syncAllNow() {
   lastGoogle = 0;
   await syncNow();
+}
+
+// ---------- Coach, notifications, avatar ----------
+export async function coachNote(workoutId: string, force = false): Promise<string> {
+  const { text } = await callGoogle2({ action: 'coach', workoutId, force });
+  await syncNow();
+  return text;
+}
+export async function weeklyNow(): Promise<string> {
+  const { text } = await callGoogle2({ action: 'weekly' });
+  await syncNow();
+  return text;
+}
+export async function avatarFromPhoto(image: string) {
+  const { features } = await callGoogle2({ action: 'avatar', image });
+  return features;
+}
+async function callGoogle2(body: Record<string, unknown>) {
+  if (!client) throw new Error('Cloud sync is not set up yet');
+  const { data, error } = await client.functions.invoke('google-callback', { body });
+  if (error) {
+    let msg = error.message;
+    try { const b = await (error as { context?: Response }).context?.json(); if (b?.error) msg = b.error; } catch { /* ignore */ }
+    throw new Error(msg);
+  }
+  return data;
+}
+
+const b64ToBytes = (b64: string) => {
+  const s = atob(b64.replace(/-/g, '+').replace(/_/g, '/') + '='.repeat((4 - (b64.length % 4)) % 4));
+  return Uint8Array.from(s, (c) => c.charCodeAt(0));
+};
+
+export function pushSupport(): 'ok' | 'install' | 'unsupported' {
+  const standalone = window.matchMedia('(display-mode: standalone)').matches || (navigator as { standalone?: boolean }).standalone === true;
+  if (!('serviceWorker' in navigator) || !('PushManager' in window) || !('Notification' in window)) return standalone ? 'unsupported' : 'install';
+  return 'ok';
+}
+
+export async function pushState(): Promise<'on' | 'off' | 'denied'> {
+  if (pushSupport() !== 'ok') return 'off';
+  if (Notification.permission === 'denied') return 'denied';
+  const reg = await navigator.serviceWorker.getRegistration();
+  const sub = await reg?.pushManager.getSubscription();
+  return sub ? 'on' : 'off';
+}
+
+export async function enablePush() {
+  const perm = await Notification.requestPermission();
+  if (perm !== 'granted') throw new Error('Notifications were not allowed. You can turn them on in iPhone Settings → Notifications → Gym Tracker.');
+  const reg = (await navigator.serviceWorker.getRegistration()) ?? (await navigator.serviceWorker.register('./sw.js'));
+  await navigator.serviceWorker.ready;
+  const { publicKey } = await callGoogle2({ action: 'vapid' });
+  const sub = (await reg.pushManager.getSubscription()) ?? (await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: b64ToBytes(publicKey) }));
+  await callGoogle2({ action: 'subscribe', subscription: sub.toJSON() });
+}
+
+export async function disablePush() {
+  const reg = await navigator.serviceWorker.getRegistration();
+  const sub = await reg?.pushManager.getSubscription();
+  if (sub) {
+    await callGoogle2({ action: 'unsubscribe', endpoint: sub.endpoint }).catch(() => {});
+    await sub.unsubscribe();
+  }
+}
+
+export async function testPush(): Promise<number> {
+  const { sent } = await callGoogle2({ action: 'test-push' });
+  return sent;
 }

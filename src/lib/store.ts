@@ -34,12 +34,35 @@ export interface Tombstone {
   at: string;
 }
 
+export interface AvatarFeatures {
+  skin: string;
+  hair: string;
+  eyebrows: string;
+  hairStyle: 'bald' | 'buzz' | 'short' | 'medium' | 'long' | 'curly';
+  facialHair: 'none' | 'stubble' | 'moustache' | 'beard';
+  glasses: boolean;
+}
+
+export type NotifyKind = 'weighIn' | 'coach' | 'weekly' | 'measure';
+
 export interface Settings {
   goalWeight: number;
   weeklyTarget: number;
   heightCm: number;
   pinned: string[]; // exercise keys
   reminderTime: string;
+  maxHr?: number;
+  tz?: string;
+  notify?: Partial<Record<NotifyKind, boolean>>;
+  avatar?: AvatarFeatures;
+}
+
+export interface Insight {
+  id: string;
+  kind: 'workout' | 'weekly';
+  ref: string | null;
+  text: string;
+  created_at: string;
 }
 
 export interface ActiveWorkout {
@@ -56,6 +79,8 @@ export interface State {
   settingsUpdatedAt?: string;
   active: ActiveWorkout | null;
   tombstones: Tombstone[];
+  /** Coach notes written by the server (read-only here). */
+  insights: Insight[];
 }
 
 const KEY = 'gym-tracker:v1';
@@ -77,6 +102,7 @@ function initial(): State {
     settings: { ...DEFAULT_SETTINGS },
     active: null,
     tombstones: [],
+    insights: [],
   };
 }
 
@@ -85,7 +111,7 @@ function load(): State {
     const raw = localStorage.getItem(KEY);
     if (raw) {
       const s = JSON.parse(raw) as State;
-      return { ...initial(), ...s, settings: { ...DEFAULT_SETTINGS, ...s.settings }, tombstones: s.tombstones ?? [] };
+      return { ...initial(), ...s, settings: { ...DEFAULT_SETTINGS, ...s.settings }, tombstones: s.tombstones ?? [], insights: s.insights ?? [] };
     }
   } catch {
     /* storage unavailable: run in memory */
@@ -169,6 +195,15 @@ export const actions = {
       return { ...s, active: null, workouts: [...s.workouts, w].sort((a, b) => a.startedAt.localeCompare(b.startedAt)) };
     });
   },
+  editWorkout(id: string, rawText: string, label: string | null, exercises: ParsedExercise[]) {
+    setState((s) => ({
+      ...s,
+      workouts: s.workouts.map((w) => (w.id === id ? { ...w, rawText, label, exercises, updatedAt: now() } : w)),
+    }));
+  },
+  setInsights(insights: Insight[]) {
+    setState((s) => ({ ...s, insights }), { remote: true });
+  },
   deleteWorkout(id: string) {
     setState((s) => ({
       ...s,
@@ -203,6 +238,7 @@ export const actions = {
       settings: { ...DEFAULT_SETTINGS, ...s.settings },
       settingsUpdatedAt: t,
       tombstones: s.tombstones ?? [],
+      insights: s.insights ?? [],
       workouts: s.workouts.map((w) => ({ ...w, updatedAt: w.updatedAt ?? t })),
       weighIns: s.weighIns.map((w) => ({ ...w, updatedAt: w.updatedAt ?? t })),
       measurements: s.measurements.map((m) => ({ ...m, updatedAt: m.updatedAt ?? t })),

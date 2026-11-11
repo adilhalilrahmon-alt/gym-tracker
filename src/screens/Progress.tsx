@@ -3,6 +3,10 @@ import { actions, todayISO, useStore } from '../lib/store';
 import { addDays, allLiftKeys, durationMin, liftHistory, liftSummary, parseDate, setCount, sevenDayAvg, weeklyRate } from '../lib/stats';
 import { formatSet } from '../lib/parser';
 import { Icon, LineChart } from '../components/ui';
+import { HrZones } from '../components/HrZones';
+import { EditWorkoutSheet } from '../components/EditWorkoutSheet';
+import { coachNote, weeklyNow } from '../lib/sync';
+import type { Workout } from '../lib/store';
 
 const dayNum = (iso: string) => Math.round(+parseDate(iso) / 864e5);
 
@@ -10,6 +14,16 @@ export function Progress({ onWeight }: { onWeight: () => void }) {
   const s = useStore((x) => x);
   const today = todayISO();
   const [del, setDel] = useState<string | null>(null);
+  const [editing, setEditing] = useState<Workout | null>(null);
+  const [busy, setBusy] = useState<string | null>(null);
+  const [err, setErr] = useState('');
+  const weekly = s.insights.find((i) => i.kind === 'weekly');
+  const noteFor = (id: string) => s.insights.find((i) => i.id === `w-${id}`);
+  const maxHr = s.settings.maxHr ?? 190;
+  const ask = async (key: string, fn: () => Promise<unknown>) => {
+    setBusy(key); setErr('');
+    try { await fn(); } catch (e) { setErr((e as Error).message); } finally { setBusy(null); }
+  };
   const recentW = s.weighIns.filter((w) => w.date >= addDays(today, -90));
   const avg = sevenDayAvg(s.weighIns).filter((p) => p.date >= addDays(today, -90));
   const rate = weeklyRate(s.weighIns);
@@ -24,6 +38,15 @@ export function Progress({ onWeight }: { onWeight: () => void }) {
   return (
     <main className="screen">
       <h1>Progress</h1>
+
+      <section className="card col" style={{ gap: 8 }}>
+        <div className="between">
+          <h2>Weekly review</h2>
+          <button className="btn subtle" style={{ height: 38 }} disabled={busy === 'weekly'} onClick={() => ask('weekly', weeklyNow)}>{busy === 'weekly' ? 'Writing…' : weekly ? 'Refresh' : 'Write now'}</button>
+        </div>
+        {weekly ? <p style={{ margin: 0, lineHeight: 1.45, whiteSpace: 'pre-line' }}>{weekly.text}</p> : <span className="small muted">Your coach writes this every Sunday at 6 pm. Tap Write now for one today.</span>}
+        {err && <span className="small warn">{err}</span>}
+      </section>
 
       <section className="card col" style={{ gap: 8 }}>
         <div className="between">
@@ -77,9 +100,15 @@ export function Progress({ onWeight }: { onWeight: () => void }) {
               <span className="muted small">Details</span>
             </summary>
             <div className="col" style={{ gap: 8, paddingTop: 8 }}>
+              <div className="col" style={{ gap: 4 }}>
+                <span className="eyebrow" style={{ color: 'var(--gold)' }}>Coach</span>
+                {noteFor(w.id) ? <p style={{ margin: 0, lineHeight: 1.45 }}>{noteFor(w.id)!.text}</p> : <span className="small muted">{w.hr ? 'No note yet.' : 'Your note arrives once heart rate syncs, or 45 min after you finish.'}</span>}
+                <button className="btn subtle" style={{ height: 38, alignSelf: 'flex-start' }} disabled={busy === w.id} onClick={() => ask(w.id, () => coachNote(w.id, !!noteFor(w.id)))}>{busy === w.id ? 'Thinking…' : noteFor(w.id) ? 'Rewrite note' : 'Get coach note now'}</button>
+              </div>
               {w.hr && (
-                <div className="col" style={{ gap: 2 }}>
+                <div className="col" style={{ gap: 4 }}>
                   <span className="small" style={{ fontWeight: 800 }}>Heart rate <span className="muted">avg {w.hr.avg} · max {w.hr.max} bpm</span></span>
+                  <HrZones series={w.hr.series} maxHr={maxHr} guessed={s.settings.maxHr == null} />
                   <LineChart label={`Heart rate during ${w.label ?? 'workout'}`} height={90} series={[{ values: w.hr.series.map((y, x) => (y == null ? null : { x, y })).filter((p): p is { x: number; y: number } => p !== null), color: '#FF6B5E' }]} />
                 </div>
               )}
@@ -89,11 +118,15 @@ export function Progress({ onWeight }: { onWeight: () => void }) {
                   <div className="row" style={{ flexWrap: 'wrap', gap: 6 }}>{ex.sets.map((st, j) => <span key={j} className="chip">{formatSet(st)}</span>)}</div>
                 </div>
               ))}
-              <button className="btn ghost" style={{ height: 40, alignSelf: 'flex-start' }} onClick={() => { if (del === w.id) actions.deleteWorkout(w.id); else { setDel(w.id); setTimeout(() => setDel(null), 3000); } }}>{del === w.id ? 'Tap again to delete' : 'Delete workout'}</button>
+              <div className="row">
+              <button className="btn subtle" style={{ height: 40 }} onClick={() => setEditing(w)}>Edit</button>
+              <button className="btn ghost" style={{ height: 40 }} onClick={() => { if (del === w.id) actions.deleteWorkout(w.id); else { setDel(w.id); setTimeout(() => setDel(null), 3000); } }}>{del === w.id ? 'Tap again to delete' : 'Delete workout'}</button>
+              </div>
             </div>
           </details>
         ))}
       </section>
+      {editing && <EditWorkoutSheet w={editing} onClose={() => setEditing(null)} />}
     </main>
   );
 }
