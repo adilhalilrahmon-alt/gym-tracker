@@ -109,6 +109,7 @@ async function accessToken(userId: string): Promise<string> {
 
 // ---------- Google Health reads ----------
 type DP = Record<string, any>;
+let diag: Record<string, unknown> = {};
 async function listPoints(token: string, type: string, filter: string): Promise<DP[]> {
   const out: DP[] = [];
   let pageToken = '';
@@ -139,7 +140,10 @@ function firstNumber(o: DP | undefined, prefer: string[]): number | null {
 
 async function syncWeights(userId: string, token: string, since: string) {
   const f = (t: string) => `${t}.sample_time.physical_time >= "${since}"`;
-  const [w, bf] = await Promise.all([listPoints(token, 'weight', f('weight')), listPoints(token, 'body-fat', f('body_fat')).catch(() => [] as DP[])]);
+  const [w, bf] = await Promise.all([listPoints(token, 'weight', f('weight')), listPoints(token, 'body-fat', f('body_fat')).catch((e) => { diag.bodyFatError = String(e.message); return [] as DP[]; })]);
+  diag.weightPoints = w.length; diag.bodyFatPoints = bf.length;
+  diag.weightSample = w[0] ? JSON.stringify(w[w.length - 1]).slice(0, 600) : null;
+  diag.bodyFatSample = bf[0] ? JSON.stringify(bf[bf.length - 1]).slice(0, 600) : null;
   // Earliest reading of each local day = the morning weigh-in.
   const days = new Map<string, { t: number; weight?: number; bodyFat?: number }>();
   for (const p of w) {
@@ -213,15 +217,23 @@ async function syncHeartRate(userId: string, token: string) {
 async function sync(userId: string) {
   const { data: st } = await admin.from('integrations').select('last_sync_at').eq('user_id', userId).eq('provider', 'google').maybeSingle();
   const since = st?.last_sync_at ? new Date(Date.parse(st.last_sync_at) - 3 * 864e5).toISOString() : new Date(Date.now() - 120 * 864e5).toISOString();
+  diag = { since };
   try {
     const token = await accessToken(userId);
+    // 24 h of heart rate, to confirm the watch data is reachable.
+    try {
+      const hr = await listPoints(token, 'heart-rate', `heart_rate.sample_time.physical_time >= "${new Date(Date.now() - 864e5).toISOString()}"`);
+      diag.heartRate24h = hr.length;
+      diag.heartRateSample = hr[0] ? JSON.stringify(hr[hr.length - 1]).slice(0, 400) : null;
+    } catch (e) { diag.heartRateError = String((e as Error).message); }
     const weighIns = await syncWeights(userId, token, since);
     const workouts = await syncHeartRate(userId, token);
-    await setStatus(userId, { last_sync_at: new Date().toISOString(), last_error: null });
+    diag.weighInsWritten = weighIns; diag.workoutsWithHr = workouts;
+    await setStatus(userId, { last_sync_at: new Date().toISOString(), last_error: null, debug: diag });
     return json({ ok: true, weighIns, workouts });
   } catch (e) {
     const msg = (e as Error).message;
-    if (msg !== 'not_connected' && msg !== 'reconnect') await setStatus(userId, { last_error: msg.slice(0, 300) });
+    if (msg !== 'not_connected' && msg !== 'reconnect') await setStatus(userId, { last_error: msg.slice(0, 300), debug: { ...diag, error: msg } });
     return json({ ok: false, error: msg }, msg === 'not_connected' ? 409 : 500);
   }
 }

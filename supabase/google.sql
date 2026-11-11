@@ -32,3 +32,6 @@ create table if not exists public.integrations (
 alter table public.integrations enable row level security;
 drop policy if exists "read own" on public.integrations;
 create policy "read own" on public.integrations for select to authenticated using (auth.uid() = user_id);
+
+-- Last sync diagnostics (counts and one raw sample per data type).
+alter table public.integrations add column if not exists debug jsonb;
