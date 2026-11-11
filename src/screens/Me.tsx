@@ -4,6 +4,7 @@ import { navyBodyFat, parseDate } from '../lib/stats';
 import { SAMPLE } from '../lib/avatar';
 import { FrontAvatar, SideAvatar, setHeightCm } from '../components/Avatar';
 import { Sheet } from '../components/ui';
+import { SyncCard } from '../components/SyncCard';
 
 const LABELS: Record<MeasureKey, string> = { neck: 'Neck', shoulders: 'Shoulders', chest: 'Chest', biceps: 'Biceps (flexed)', waist: 'Waist (at navel)', hips: 'Hips', thigh: 'Mid-thigh', calf: 'Calf' };
 
@@ -116,9 +117,11 @@ export function Me() {
         <span className="tiny muted">Reminders, Renpho and Fitbit sync, and the AI coach arrive in the next phases.</span>
       </section>
 
+      <SyncCard />
+
       <section className="card col" style={{ gap: 10 }}>
         <h2>Your data</h2>
-        <span className="small muted">Stored on this phone. Export a backup now and then until cloud sync is on.</span>
+        <span className="small muted">Stored on this phone, and in the cloud once you sign in above. You can also export a file backup.</span>
         <div className="row">
           <button className="btn subtle" onClick={exportData}>Export backup</button>
           <button className="btn subtle" onClick={() => file.current?.click()}>Import</button>

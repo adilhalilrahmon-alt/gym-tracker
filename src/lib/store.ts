@@ -10,6 +10,7 @@ export interface Workout {
   label: string | null;
   rawText: string;
   exercises: ParsedExercise[];
+  updatedAt?: string;
 }
 
 export interface WeighIn {
@@ -17,11 +18,19 @@ export interface WeighIn {
   weight: number; // lb
   bodyFat?: number;
   source: 'manual' | 'scale';
+  updatedAt?: string;
 }
 
 export const MEASURE_KEYS = ['neck', 'shoulders', 'chest', 'biceps', 'waist', 'hips', 'thigh', 'calf'] as const;
 export type MeasureKey = (typeof MEASURE_KEYS)[number];
-export type Measurement = { date: string } & Record<MeasureKey, number>;
+export type Measurement = { date: string; updatedAt?: string } & Record<MeasureKey, number>;
+
+export type SyncTable = 'workouts' | 'weigh_ins' | 'measurements';
+export interface Tombstone {
+  table: SyncTable;
+  key: string; // workout id or date
+  at: string;
+}
 
 export interface Settings {
   goalWeight: number;
@@ -42,7 +51,9 @@ export interface State {
   weighIns: WeighIn[];
   measurements: Measurement[];
   settings: Settings;
+  settingsUpdatedAt?: string;
   active: ActiveWorkout | null;
+  tombstones: Tombstone[];
 }
 
 const KEY = 'gym-tracker:v1';
@@ -63,6 +74,7 @@ function initial(): State {
     measurements: [],
     settings: { ...DEFAULT_SETTINGS },
     active: null,
+    tombstones: [],
   };
 }
 
@@ -71,7 +83,7 @@ function load(): State {
     const raw = localStorage.getItem(KEY);
     if (raw) {
       const s = JSON.parse(raw) as State;
-      return { ...initial(), ...s, settings: { ...DEFAULT_SETTINGS, ...s.settings } };
+      return { ...initial(), ...s, settings: { ...DEFAULT_SETTINGS, ...s.settings }, tombstones: s.tombstones ?? [] };
     }
   } catch {
     /* storage unavailable: run in memory */
@@ -81,6 +93,15 @@ function load(): State {
 
 let state: State = load();
 const listeners = new Set<() => void>();
+const changeHooks = new Set<() => void>();
+
+/** Called after every local change (not after applying remote data). Used by sync. */
+export function onLocalChange(fn: () => void) {
+  changeHooks.add(fn);
+  return () => changeHooks.delete(fn);
+}
+
+const now = () => new Date().toISOString();
 
 function save() {
   try {
@@ -90,10 +111,11 @@ function save() {
   }
 }
 
-export function setState(update: (s: State) => State) {
+export function setState(update: (s: State) => State, opts: { remote?: boolean } = {}) {
   state = update(state);
   save();
   listeners.forEach((l) => l());
+  if (!opts.remote) changeHooks.forEach((h) => h());
 }
 
 export function getState() {
@@ -140,17 +162,22 @@ export const actions = {
         label,
         rawText: s.active.text,
         exercises,
+        updatedAt: now(),
       };
       return { ...s, active: null, workouts: [...s.workouts, w].sort((a, b) => a.startedAt.localeCompare(b.startedAt)) };
     });
   },
   deleteWorkout(id: string) {
-    setState((s) => ({ ...s, workouts: s.workouts.filter((w) => w.id !== id) }));
+    setState((s) => ({
+      ...s,
+      workouts: s.workouts.filter((w) => w.id !== id),
+      tombstones: [...s.tombstones, { table: 'workouts' as const, key: id, at: now() }],
+    }));
   },
   logWeight(weight: number, date = todayISO()) {
     setState((s) => ({
       ...s,
-      weighIns: [...s.weighIns.filter((w) => w.date !== date), { date, weight, source: 'manual' as const }].sort((a, b) =>
+      weighIns: [...s.weighIns.filter((w) => w.date !== date), { date, weight, source: 'manual' as const, updatedAt: now() }].sort((a, b) =>
         a.date.localeCompare(b.date)
       ),
     }));
@@ -158,15 +185,25 @@ export const actions = {
   logMeasurement(m: Measurement) {
     setState((s) => ({
       ...s,
-      measurements: [...s.measurements.filter((x) => x.date !== m.date), m].sort((a, b) => a.date.localeCompare(b.date)),
+      measurements: [...s.measurements.filter((x) => x.date !== m.date), { ...m, updatedAt: now() }].sort((a, b) => a.date.localeCompare(b.date)),
     }));
   },
   updateSettings(p: Partial<Settings>) {
-    setState((s) => ({ ...s, settings: { ...s.settings, ...p } }));
+    setState((s) => ({ ...s, settings: { ...s.settings, ...p }, settingsUpdatedAt: now() }));
   },
   importData(json: string) {
     const s = JSON.parse(json) as State;
     if (!s || s.version !== 1 || !Array.isArray(s.workouts)) throw new Error('Not a Gym Tracker export');
-    setState(() => ({ ...initial(), ...s, settings: { ...DEFAULT_SETTINGS, ...s.settings } }));
+    const t = now();
+    setState(() => ({
+      ...initial(),
+      ...s,
+      settings: { ...DEFAULT_SETTINGS, ...s.settings },
+      settingsUpdatedAt: t,
+      tombstones: s.tombstones ?? [],
+      workouts: s.workouts.map((w) => ({ ...w, updatedAt: w.updatedAt ?? t })),
+      weighIns: s.weighIns.map((w) => ({ ...w, updatedAt: w.updatedAt ?? t })),
+      measurements: s.measurements.map((m) => ({ ...m, updatedAt: m.updatedAt ?? t })),
+    }));
   },
 };
