@@ -10,6 +10,8 @@ export interface Workout {
   label: string | null;
   rawText: string;
   exercises: ParsedExercise[];
+  /** Heart rate from Google Health, filled in by the server after the watch syncs. */
+  hr?: { avg: number; max: number; series: (number | null)[]; samples: number };
   updatedAt?: string;
 }
 

@@ -5,6 +5,7 @@ import { SAMPLE } from '../lib/avatar';
 import { FrontAvatar, SideAvatar, setHeightCm } from '../components/Avatar';
 import { Sheet } from '../components/ui';
 import { SyncCard } from '../components/SyncCard';
+import { GoogleCard } from '../components/GoogleCard';
 
 const LABELS: Record<MeasureKey, string> = { neck: 'Neck', shoulders: 'Shoulders', chest: 'Chest', biceps: 'Biceps (flexed)', waist: 'Waist (at navel)', hips: 'Hips', thigh: 'Mid-thigh', calf: 'Calf' };
 
@@ -118,6 +119,7 @@ export function Me() {
       </section>
 
       <SyncCard />
+      <GoogleCard />
 
       <section className="card col" style={{ gap: 10 }}>
         <h2>Your data</h2>

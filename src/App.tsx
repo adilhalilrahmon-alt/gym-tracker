@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+import { googleRedirectResult, syncAllNow } from './lib/sync';
 import { useStore } from './lib/store';
 import { setHeightCm } from './lib/avatar';
 import { Home } from './screens/Home';
@@ -7,7 +8,7 @@ import { Progress } from './screens/Progress';
 import { Streak } from './screens/Streak';
 import { Me } from './screens/Me';
 import { WeightSheet } from './components/WeightSheet';
-import { Icon } from './components/ui';
+import { Icon, Sheet } from './components/ui';
 
 type Tab = 'home' | 'progress' | 'streak' | 'me';
 const TABS: { id: Tab; label: string; icon: JSX.Element }[] = [
@@ -22,6 +23,20 @@ export function App() {
   const [logging, setLogging] = useState(false);
   const [weight, setWeight] = useState(false);
   const active = useStore((s) => s.active);
+  const [notice, setNotice] = useState<string | null>(null);
+  useEffect(() => {
+    const r = googleRedirectResult();
+    if (!r) return;
+    setTab('me');
+    const msgs: Record<string, string> = {
+      connected: 'Google Health is connected. Your recent weigh-ins are being pulled in now.',
+      cancelled: 'Google connection was cancelled. Nothing changed.',
+      expired: 'That connection attempt expired. Tap Connect Google Health again.',
+      failed: 'Google sign-in went through, but saving the connection failed. Try again in a minute.',
+    };
+    setNotice(msgs[r] ?? 'Google connection finished.');
+    if (r === 'connected') void syncAllNow();
+  }, []);
   setHeightCm(useStore((s) => s.settings.heightCm));
 
   return (
@@ -41,6 +56,12 @@ export function App() {
 
       {logging && <Logger onClose={() => setLogging(false)} />}
       {weight && <WeightSheet onClose={() => setWeight(false)} />}
+      {notice && (
+        <Sheet title="Google Health" onClose={() => setNotice(null)}>
+          <p style={{ margin: 0 }}>{notice}</p>
+          <button className="btn big-btn" onClick={() => setNotice(null)}>OK</button>
+        </Sheet>
+      )}
     </div>
   );
 }

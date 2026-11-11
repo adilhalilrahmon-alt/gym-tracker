@@ -10,7 +10,7 @@ export function WeightSheet({ onClose }: { onClose: () => void }) {
   const ok = n > 60 && n < 500;
   return (
     <Sheet title="Log weight" onClose={onClose}>
-      <p className="muted small" style={{ margin: 0 }}>Morning, after the bathroom, before eating. Your Renpho will fill this in automatically once Google Health is connected.</p>
+      <p className="muted small" style={{ margin: 0 }}>Morning, after the bathroom, before eating. With Google Health connected, your Renpho fills this in on its own.</p>
       <div className="grid2">
         <div className="field">
           <label htmlFor="w-val">Weight (lb)</label>

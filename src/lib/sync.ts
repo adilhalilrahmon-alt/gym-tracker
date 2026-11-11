@@ -5,9 +5,16 @@ import { APP_URL, SUPABASE_KEY, SUPABASE_URL } from './config';
 import { getState, onLocalChange, setState } from './store';
 import { collectPush, mergeRemote, type Remote } from './merge';
 
+export interface GoogleStatus {
+  connected: boolean;
+  lastSync: string | null;
+  error: string | null;
+}
+
 export interface SyncStatus {
   configured: boolean;
   email: string | null;
+  google: GoogleStatus | null;
   phase: 'idle' | 'syncing' | 'error';
   lastSync: string | null;
   error?: string;
@@ -23,7 +30,8 @@ const client: SupabaseClient | null = SUPABASE_URL && SUPABASE_KEY
   ? createClient(SUPABASE_URL, SUPABASE_KEY, { auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: false } })
   : null;
 
-let status: SyncStatus = { configured: !!client, email: null, phase: 'idle', lastSync: readMeta().lastSync };
+let status: SyncStatus = { configured: !!client, email: null, google: null, phase: 'idle', lastSync: readMeta().lastSync };
+let lastGoogle = 0;
 const subs = new Set<() => void>();
 const setStatus = (p: Partial<SyncStatus>) => { status = { ...status, ...p }; subs.forEach((f) => f()); };
 
@@ -43,6 +51,7 @@ export function syncNow(): Promise<void> {
       const { data: auth } = await client.auth.getUser();
       const uid = auth.user?.id;
       if (!uid) throw new Error('Signed out');
+      await refreshGoogle(false);
       const [w, wi, m, st] = await Promise.all([
         client.from('workouts').select('id,data,deleted,updated_at'),
         client.from('weigh_ins').select('date,weight,body_fat,source,deleted,updated_at'),
@@ -111,4 +120,56 @@ export function startSync() {
   onLocalChange(() => { clearTimeout(timer); timer = setTimeout(() => void syncNow(), 2500); });
   document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') void syncNow(); });
   window.addEventListener('online', () => void syncNow());
+}
+
+// ---------- Google Health ----------
+async function callGoogle(action: string) {
+  if (!client) throw new Error('Cloud sync is not set up yet');
+  const { data, error } = await client.functions.invoke('google-callback', { body: { action } });
+  if (error) {
+    let msg = error.message;
+    try { const b = await (error as { context?: Response }).context?.json(); if (b?.error) msg = b.error; } catch { /* ignore */ }
+    throw new Error(msg);
+  }
+  return data;
+}
+
+async function loadGoogleStatus() {
+  if (!client) return;
+  const { data } = await client.from('integrations').select('connected_at,last_sync_at,last_error').eq('provider', 'google').maybeSingle();
+  setStatus({ google: { connected: !!data?.connected_at, lastSync: data?.last_sync_at ?? null, error: data?.last_error ?? null } });
+}
+
+/** Ask the server to pull new Renpho weigh-ins and workout heart rate from Google Health (at most every 10 min unless forced). */
+export async function refreshGoogle(force: boolean) {
+  if (!client || !status.email) return;
+  if (!status.google) await loadGoogleStatus();
+  if (!status.google?.connected) return;
+  if (!force && Date.now() - lastGoogle < 10 * 60e3) return;
+  lastGoogle = Date.now();
+  try { await callGoogle('sync'); } catch { /* status row carries the error */ }
+  await loadGoogleStatus();
+}
+
+export async function connectGoogle() {
+  const { url } = await callGoogle('start');
+  window.location.href = url;
+}
+
+export async function disconnectGoogle() {
+  await callGoogle('disconnect');
+  await loadGoogleStatus();
+}
+
+/** Handle the #google-connected style hash the server redirects back with. */
+export function googleRedirectResult(): string | null {
+  const m = location.hash.match(/^#google-(\w+)/);
+  if (!m) return null;
+  history.replaceState(null, '', location.pathname + location.search);
+  return m[1];
+}
+
+export async function syncAllNow() {
+  lastGoogle = 0;
+  await syncNow();
 }

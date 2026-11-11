@@ -72,11 +72,17 @@ export function Progress({ onWeight }: { onWeight: () => void }) {
             <summary className="between">
               <span className="col" style={{ gap: 0 }}>
                 <strong>{w.label ?? 'Workout'}</strong>
-                <span className="small muted">{new Date(w.startedAt).toLocaleDateString('en-CA', { weekday: 'short', month: 'short', day: 'numeric' })} · {durationMin(w)} min · {setCount(w)} sets</span>
+                <span className="small muted">{new Date(w.startedAt).toLocaleDateString('en-CA', { weekday: 'short', month: 'short', day: 'numeric' })} · {durationMin(w)} min · {setCount(w)} sets{w.hr ? ` · avg HR ${w.hr.avg}` : ''}</span>
               </span>
               <span className="muted small">Details</span>
             </summary>
             <div className="col" style={{ gap: 8, paddingTop: 8 }}>
+              {w.hr && (
+                <div className="col" style={{ gap: 2 }}>
+                  <span className="small" style={{ fontWeight: 800 }}>Heart rate <span className="muted">avg {w.hr.avg} · max {w.hr.max} bpm</span></span>
+                  <LineChart label={`Heart rate during ${w.label ?? 'workout'}`} height={90} series={[{ values: w.hr.series.map((y, x) => (y == null ? null : { x, y })).filter((p): p is { x: number; y: number } => p !== null), color: '#FF6B5E' }]} />
+                </div>
+              )}
               {w.exercises.map((ex, i) => (
                 <div key={i} className="col">
                   <span className="small" style={{ fontWeight: 800 }}>{ex.name}{ex.perHand ? ' (per hand)' : ''}</span>
