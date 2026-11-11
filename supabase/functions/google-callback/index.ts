@@ -142,6 +142,12 @@ async function syncWeights(userId: string, token: string, since: string) {
   const f = (t: string) => `${t}.sample_time.physical_time >= "${since}"`;
   const [w, bf] = await Promise.all([listPoints(token, 'weight', f('weight')), listPoints(token, 'body-fat', f('body_fat')).catch((e) => { diag.bodyFatError = String(e.message); return [] as DP[]; })]);
   diag.weightPoints = w.length; diag.bodyFatPoints = bf.length;
+  diag.weightAll = w.map((p) => ({
+    t: p.weight?.sampleTime?.physicalTime, off: p.weight?.sampleTime?.utcOffset, g: p.weight?.weightGrams,
+    lb: Math.round((Number(p.weight?.weightGrams) / 453.59237) * 10) / 10,
+    src: [p.dataSource?.platform, p.dataSource?.application?.packageName ?? p.dataSource?.application?.name, p.dataSource?.device?.manufacturer].filter(Boolean).join(' / '),
+  }));
+  diag.bodyFatAll = bf.map((p) => ({ t: p.bodyFat?.sampleTime?.physicalTime, pct: p.bodyFat?.percentage, src: p.dataSource?.application?.packageName ?? p.dataSource?.platform }));
   diag.weightSample = w[0] ? JSON.stringify(w[w.length - 1]).slice(0, 600) : null;
   diag.bodyFatSample = bf[0] ? JSON.stringify(bf[bf.length - 1]).slice(0, 600) : null;
   // Earliest reading of each local day = the morning weigh-in.
