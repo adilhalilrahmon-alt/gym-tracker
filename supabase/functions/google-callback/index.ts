@@ -150,23 +150,33 @@ async function syncWeights(userId: string, token: string, since: string) {
   diag.bodyFatAll = bf.map((p) => ({ t: p.bodyFat?.sampleTime?.physicalTime, pct: p.bodyFat?.percentage, src: p.dataSource?.application?.packageName ?? p.dataSource?.platform }));
   diag.weightSample = w[0] ? JSON.stringify(w[w.length - 1]).slice(0, 600) : null;
   diag.bodyFatSample = bf[0] ? JSON.stringify(bf[bf.length - 1]).slice(0, 600) : null;
-  // Earliest reading of each local day = the morning weigh-in.
-  const days = new Map<string, { t: number; weight?: number; bodyFat?: number }>();
-  for (const p of w) {
+  // Morning session = readings within 30 min of the day's first one; use the LAST of those
+  // (scales often log a few readings while settling or when re-weighing).
+  const SESSION = 30 * 60e3;
+  function pick<T>(pts: { d: string; t: number; v: T }[]) {
+    const byDay = new Map<string, { d: string; t: number; v: T }[]>();
+    for (const p of pts) byDay.set(p.d, [...(byDay.get(p.d) ?? []), p]);
+    const out = new Map<string, { t: number; v: T }>();
+    for (const [d, list] of byDay) {
+      list.sort((a, b) => a.t - b.t);
+      const session = list.filter((p) => p.t - list[0].t <= SESSION);
+      const last = session[session.length - 1];
+      out.set(d, { t: last.t, v: last.v });
+    }
+    return out;
+  }
+  const wPts = w.flatMap((p) => {
     const s = p.weight?.sampleTime; const g = firstNumber(p.weight, ['weightGrams']);
-    if (!s || g == null) continue;
-    const d = localDate(s); const t = Date.parse(s.physicalTime);
-    const cur = days.get(d);
-    if (!cur || cur.weight == null || t < cur.t) days.set(d, { ...cur, t, weight: Math.round((g / 453.59237) * 10) / 10 });
-  }
-  for (const p of bf) {
+    return s && g != null ? [{ d: localDate(s), t: Date.parse(s.physicalTime), v: Math.round((g / 453.59237) * 10) / 10 }] : [];
+  });
+  const bfPts = bf.flatMap((p) => {
     const s = p.bodyFat?.sampleTime; const v = firstNumber(p.bodyFat, ['percentage', 'bodyFatPercentage']);
-    if (!s || v == null) continue;
-    const d = localDate(s); const t = Date.parse(s.physicalTime);
-    const cur = days.get(d) ?? { t };
-    const bfT = (cur as { bfT?: number }).bfT;
-    if (bfT == null || t < bfT) days.set(d, { ...cur, bodyFat: Math.round(v * 10) / 10, bfT: t } as typeof cur);
-  }
+    return s && v != null ? [{ d: localDate(s), t: Date.parse(s.physicalTime), v: Math.round(v * 10) / 10 }] : [];
+  });
+  const wDay = pick(wPts);
+  const bfDay = pick(bfPts);
+  const days = new Map<string, { t: number; weight?: number; bodyFat?: number }>();
+  for (const [d, x] of wDay) days.set(d, { t: x.t, weight: x.v, bodyFat: bfDay.get(d)?.v });
   if (!days.size) return 0;
   const { data: existing } = await admin.from('weigh_ins').select('date,weight,body_fat,source,updated_at').eq('user_id', userId).in('date', [...days.keys()]);
   const byDate = new Map((existing ?? []).map((r: DP) => [r.date, r]));
