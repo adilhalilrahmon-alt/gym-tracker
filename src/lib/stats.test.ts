@@ -1,4 +1,4 @@
-import { e1rm, streakWeeks, weekStart, liftSummary, heatmap, monthGrid, navyBodyFat, sevenDayAvg, stallSentence } from './stats';
+import { e1rm, streakWeeks, weekStart, liftSummary, heatmap, monthGrid, navyBodyFat, sevenDayAvg, stallSentence, dayNumber } from './stats';
 import { parseWorkout } from './parser';
 import type { Workout } from './store';
 
@@ -29,6 +29,11 @@ describe('stats', () => {
     const days = ['2026-10-26', '2026-10-27', '2026-10-29', '2026-10-30', '2026-11-02', '2026-11-03', '2026-11-05', '2026-11-06', '2026-11-09'];
     const ws = days.map((d) => wk(d, 'squat 225x5'));
     expect(streakWeeks(ws, 4, '2026-11-11')).toBe(2); // this week not hit yet, 2 prior weeks hit
+  });
+
+  it('turns dates into chart day numbers without a time-zone shift', () => {
+    expect(dayNumber('1970-01-02')).toBe(1);
+    expect(new Date(dayNumber('2026-11-11') * 864e5).toISOString().slice(0, 10)).toBe('2026-11-11');
   });
 
   it('flags a stalled lift', () => {

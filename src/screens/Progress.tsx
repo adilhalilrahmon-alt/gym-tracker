@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { actions, todayISO, useStore } from '../lib/store';
-import { addDays, allLiftKeys, durationMin, liftHistory, liftSummary, parseDate, setCount, sevenDayAvg, weeklyRate } from '../lib/stats';
+import { addDays, allLiftKeys, durationMin, liftHistory, liftSummary, setCount, sevenDayAvg, weeklyRate, dayNumber } from '../lib/stats';
 import { formatSet } from '../lib/parser';
 import { Icon, LineChart, dayLabel } from '../components/ui';
 import { HrZones } from '../components/HrZones';
@@ -8,7 +8,7 @@ import { EditWorkoutSheet } from '../components/EditWorkoutSheet';
 import { coachNote, weeklyNow } from '../lib/sync';
 import type { Workout } from '../lib/store';
 
-const dayNum = (iso: string) => Math.round(+parseDate(iso) / 864e5);
+const dayNum = dayNumber;
 
 export function Progress({ onWeight, onLift }: { onWeight: () => void; onLift: (key: string) => void }) {
   const s = useStore((x) => x);

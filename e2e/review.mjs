@@ -76,6 +76,8 @@ Your job:
 - Score severity on the user's experience, not on how dramatic the note sounds.
 - Recommendations must be one concrete, buildable change. Checks must be pass/fail.
 - Don't invent problems the notes don't support.
+- Product principle: the app records and gives feedback. It does not prescribe programs, target weights or rep schemes.
+  Drop notes that ask for that, or list them as out of scope rather than as problems.
 Answer only by calling submit_findings.`;
 
 const client = DRY ? null : new Anthropic();

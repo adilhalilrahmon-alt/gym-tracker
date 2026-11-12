@@ -1,10 +1,10 @@
 import { useStore, todayISO } from '../lib/store';
-import { coachNote, liftSummary, navyBodyFat, parseDate, sevenDayAvg, weekCount, weekStart, addDays } from '../lib/stats';
+import { coachNote, liftSummary, navyBodyFat, parseDate, sevenDayAvg, weekCount, weekStart, addDays, dayNumber } from '../lib/stats';
 import { FrontAvatar } from '../components/Avatar';
 import { SAMPLE } from '../lib/avatar';
 import { Icon, LineChart, Ring } from '../components/ui';
 
-const dayNum = (iso: string) => Math.round(+parseDate(iso) / 864e5);
+const dayNum = dayNumber;
 
 export function Home({ onWeight, onGo, onLift }: { onWeight: () => void; onGo: (t: 'progress' | 'me' | 'streak') => void; onLift: (key: string) => void }) {
   const s = useStore((x) => x);

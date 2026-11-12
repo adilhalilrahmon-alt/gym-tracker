@@ -1,8 +1,8 @@
 import { todayISO, useStore } from '../lib/store';
-import { STALL_ADVICE, liftHistory, liftSummary, parseDate } from '../lib/stats';
+import { STALL_ADVICE, liftHistory, liftSummary, parseDate, dayNumber } from '../lib/stats';
 import { Icon, LineChart, dayLabel } from './ui';
 
-const dayNum = (iso: string) => Math.round(+parseDate(iso) / 864e5);
+const dayNum = dayNumber;
 const short = (iso: string) => parseDate(iso).toLocaleDateString('en-CA', { month: 'short', day: 'numeric' });
 
 /** Full-screen view of one lift: latest vs best, trend with dates, stall status and what to try. */

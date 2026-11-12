@@ -3,6 +3,9 @@ import { todayISO } from './store';
 
 export const e1rm = (w: number, r: number) => (r <= 1 ? w : w * (1 + r / 30));
 
+/** Whole days since 1970-01-01 for a YYYY-MM-DD date, independent of time zone (chart x values). */
+export const dayNumber = (iso: string) => Date.UTC(+iso.slice(0, 4), +iso.slice(5, 7) - 1, +iso.slice(8, 10)) / 864e5;
+
 export function parseDate(iso: string): Date {
   return iso.length === 10 ? new Date(iso + 'T12:00:00') : new Date(iso);
 }
