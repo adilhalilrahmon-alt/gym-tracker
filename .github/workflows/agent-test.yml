@@ -1,0 +1,39 @@
+# Runs the E2E tester agent on demand. Start it from GitHub → Actions → "Agent user test" → Run workflow
+# (works from the GitHub iPhone app). Needs the ANTHROPIC_API_KEY repository secret.
+name: Agent user test
+on:
+  workflow_dispatch:
+    inputs:
+      task:
+        description: 'Task id from e2e/tasks.json (leave empty to run all)'
+        required: false
+        default: ''
+      max_steps:
+        description: 'Max steps per task (cost control)'
+        required: false
+        default: '35'
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run build:test
+      - run: npx playwright install --with-deps chromium
+      - name: Serve the offline test build
+        run: npx vite preview --outDir dist-test --port 4173 & sleep 3
+      - name: Run the agent
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          MAX_STEPS: ${{ inputs.max_steps }}
+        run: node e2e/agent.mjs ${{ inputs.task }}
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: agent-report
+          path: e2e/out
