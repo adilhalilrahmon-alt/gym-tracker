@@ -8,6 +8,14 @@ on:
         description: 'Task id from e2e/tasks.json (leave empty to run all)'
         required: false
         default: ''
+      runs:
+        description: 'Runs per task (agents vary; 2 is a good default)'
+        required: false
+        default: '2'
+      verify_top:
+        description: 'How many top findings the verifier re-checks (0 to skip)'
+        required: false
+        default: '3'
       max_steps:
         description: 'Max steps per task (cost control)'
         required: false
@@ -17,8 +25,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
         with:
           node-version: 22
           cache: npm
@@ -31,7 +39,13 @@ jobs:
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           MAX_STEPS: ${{ inputs.max_steps }}
+          RUNS: ${{ inputs.runs }}
         run: node e2e/agent.mjs ${{ inputs.task }}
+      - name: Review, verify and rank the findings
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          VERIFY_TOP: ${{ inputs.verify_top }}
+        run: node e2e/review.mjs
       - uses: actions/upload-artifact@v4
         if: always()
         with:
