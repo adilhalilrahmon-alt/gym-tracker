@@ -7,7 +7,7 @@
 //  1. Separate roles. Testers observe; the reviewer judges; the verifier double-checks. Mixing
 //     them biases what gets noticed.
 //  2. Structured output. The reviewer must answer by calling a tool with a strict schema
-//     (tool_choice forces it), so every finding has the same fields and code can rank them.
+//     (a tool schema, plus a nudge if it answers in prose), so every finding has the same fields and code can rank them.
 //  3. Verification. A fresh agent tries to reproduce each top finding. Unconfirmed findings are
 //     kept but marked, which removes most false alarms.
 
