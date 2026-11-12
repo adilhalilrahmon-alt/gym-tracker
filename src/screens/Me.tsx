@@ -75,6 +75,9 @@ export function Me() {
   const startM = ms.length > 1 ? ms[0] : null;
   const bf = navyBodyFat(m, s.settings.heightCm);
   const set = s.settings;
+  // Older saves only kept max HR. If it came from the age formula, show that age back.
+  const guessAge = set.maxHr ? Math.round((208 - set.maxHr) / 0.7) : undefined;
+  const shownAge = set.age ?? (guessAge && maxHrFromAge(guessAge) === set.maxHr ? guessAge : undefined);
 
   const exportData = () => {
     const blob = new Blob([JSON.stringify(getState(), null, 2)], { type: 'application/json' });
@@ -139,8 +142,8 @@ export function Me() {
             <input id="s-height" className="input" inputMode="decimal" defaultValue={set.heightCm} onBlur={(e) => { const n = parseFloat(e.target.value); if (n > 120 && n < 230) actions.updateSettings({ heightCm: n }); }} />
           </div>
           <div className="field">
-            <label htmlFor="s-age">Age (for heart-rate zones)</label>
-            <input id="s-age" className="input" inputMode="numeric" placeholder={set.maxHr ? `Max HR ${set.maxHr}` : 'e.g. 28'} onBlur={(e) => { const a = parseInt(e.target.value, 10); if (a > 12 && a < 90) { actions.updateSettings({ maxHr: maxHrFromAge(a) }); e.target.value = ''; } }} />
+            <label htmlFor="s-age">Age</label>
+            <input id="s-age" className="input" inputMode="numeric" key={`age-${shownAge ?? ''}`} defaultValue={shownAge ?? ''} placeholder="e.g. 28" onBlur={(e) => { const a = parseInt(e.target.value, 10); if (a > 12 && a < 90 && a !== shownAge) actions.updateSettings({ age: a, maxHr: maxHrFromAge(a) }); }} />
           </div>
           <div className="field">
             <label htmlFor="s-maxhr">Max heart rate</label>
@@ -151,7 +154,7 @@ export function Me() {
             <input id="s-rem" className="input" type="time" value={set.reminderTime} onChange={(e) => actions.updateSettings({ reminderTime: e.target.value })} />
           </div>
         </div>
-        <span className="tiny muted">Max heart rate is worked out from age as 208 − 0.7 × age. Type a measured value instead if you know it.</span>
+        <span className="tiny muted">Age sets your max heart rate (208 − 0.7 × age) for the heart-rate zones. Type a measured max instead if you know it.</span>
       </section>
 
       <SyncCard />

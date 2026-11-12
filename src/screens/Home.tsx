@@ -6,7 +6,7 @@ import { Icon, LineChart, Ring } from '../components/ui';
 
 const dayNum = (iso: string) => Math.round(+parseDate(iso) / 864e5);
 
-export function Home({ onWeight, onGo }: { onWeight: () => void; onGo: (t: 'progress' | 'me' | 'streak') => void }) {
+export function Home({ onWeight, onGo, onLift }: { onWeight: () => void; onGo: (t: 'progress' | 'me' | 'streak') => void; onLift: (key: string) => void }) {
   const s = useStore((x) => x);
   const today = todayISO();
   const hour = new Date().getHours();
@@ -23,7 +23,9 @@ export function Home({ onWeight, onGo }: { onWeight: () => void; onGo: (t: 'prog
   const thisWeek = weekCount(s.workouts, weekStart(new Date()));
   const weighedToday = latest?.date === today;
   const recentNote = s.insights.find((i) => Date.now() - Date.parse(i.created_at) < 3 * 864e5);
-  const latestNote = recentNote ? (recentNote.kind === 'weekly' ? `Week in review: ${recentNote.text.split('\n')[0]}` : recentNote.text) : null;
+  // The AI often opens with "Verdict:"; the "Week in review" label already says that.
+  const firstLine = (t: string) => t.split('\n')[0].replace(/^\W*verdict\W*:?\s*/i, '');
+  const latestNote = recentNote ? (recentNote.kind === 'weekly' ? `Week in review: ${firstLine(recentNote.text)}` : recentNote.text) : null;
 
   return (
     <main className="screen">
@@ -57,10 +59,11 @@ export function Home({ onWeight, onGo }: { onWeight: () => void; onGo: (t: 'prog
         {s.settings.pinned.slice(0, 2).map((k) => {
           const l = liftSummary(s.workouts, k, today);
           return (
-            <button key={k} className="card tight col" onClick={() => onGo('progress')}>
+            <button key={k} className="card tight col" style={{ gap: 2 }} onClick={() => (l.sessions ? onLift(k) : onGo('progress'))} aria-label={`${l.name} details`}>
               <span className="eyebrow" style={{ fontSize: 11 }}>{l.name}</span>
               <span className="mid">{l.current ?? '—'}</span>
-              <span className="tiny muted">est. 1RM, lb</span>
+              <span className="tiny muted">{l.sessions ? 'latest est. 1RM, lb' : 'est. 1RM, lb'}</span>
+              {l.best != null && l.best !== l.current && <span className="tiny muted">best {l.best}</span>}
               {l.stalled ? <span className="small warn">Stalled</span> : l.change4w ? <span className={`small ${l.change4w > 0 ? 'up' : 'warn'}`}>{l.change4w > 0 ? '+' : ''}{l.change4w} in 4 wks</span> : <span className="tiny muted">{l.sessions ? `${l.sessions} session${l.sessions > 1 ? 's' : ''}` : 'No sessions yet'}</span>}
             </button>
           );

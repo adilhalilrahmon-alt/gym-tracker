@@ -26,7 +26,7 @@ button, input, textarea, select { font: inherit; color: inherit; }
 button { cursor: pointer; }
 a { color: var(--gold); }
 
-.app { height: 100%; display: flex; flex-direction: column; position: relative; overflow: hidden; }
+.app { position: fixed; top: 0; left: 0; right: 0; height: var(--app-h, 100%); display: flex; flex-direction: column; position: relative; overflow: hidden; }
 .app::before { content: ''; position: absolute; width: 260px; height: 260px; border-radius: 50%; background: #1b2a5c; opacity: .55; top: -90px; right: -80px; pointer-events: none; z-index: 0; }
 .screen { flex: 1; overflow-y: auto; -webkit-overflow-scrolling: touch; padding: calc(18px + var(--safe-t)) 18px calc(var(--nav-h) + var(--safe-b) + 96px); display: flex; flex-direction: column; gap: 14px; position: relative; z-index: 1; }
 
@@ -65,7 +65,11 @@ button.card { border: none; text-align: left; width: 100%; }
 
 .field { display: flex; flex-direction: column; gap: 4px; }
 .field label { font-size: 13px; font-weight: 800; color: var(--muted); }
-.input { height: 46px; border-radius: 12px; border: 1px solid #2c3f7c; background: var(--bg); padding: 0 12px; font-size: 16px; width: 100%; }
+.input { height: 46px; border-radius: 12px; border: 1px solid #2c3f7c; background: var(--bg); padding: 0 12px; font-size: 16px; width: 100%; min-width: 0; }
+/* iOS gives date/time inputs a fixed native width that spills out of grid cells. */
+input.input[type='time'] { -webkit-appearance: none; appearance: none; display: flex; align-items: center; text-align: left; }
+input.input[type='time']::-webkit-date-and-time-value { text-align: left; margin: 0; }
+select.input { -webkit-appearance: none; appearance: none; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' fill='none' stroke='%23A9B3D6' stroke-width='2' stroke-linecap='round'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 14px center; padding-right: 34px; }
 textarea.input { height: auto; padding: 10px 12px; line-height: 1.45; resize: none; }
 
 .nav { position: absolute; left: 0; right: 0; bottom: 0; height: calc(var(--nav-h) + var(--safe-b)); padding-bottom: var(--safe-b); background: var(--nav); display: grid; grid-template-columns: repeat(4, 1fr); align-items: center; z-index: 5; }

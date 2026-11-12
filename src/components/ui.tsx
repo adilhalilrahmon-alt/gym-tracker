@@ -34,7 +34,7 @@ export function Ring({ value, target }: { value: number; target: number }) {
   return (
     <svg role="img" aria-label={`${value} of ${target} workouts this week`} width="72" height="72" viewBox="0 0 80 80">
       <circle cx="40" cy="40" r="32" fill="none" stroke="#0B1530" strokeWidth="10" />
-      <circle cx="40" cy="40" r="32" fill="none" stroke={value > target ? '#36D6C3' : '#FF6B5E'} strokeWidth="10" strokeLinecap="round" strokeDasharray={`${frac * c} ${c}`} transform="rotate(-90 40 40)" />
+      {value > 0 && <circle cx="40" cy="40" r="32" fill="none" stroke={value >= target ? '#36D6C3' : '#FF6B5E'} strokeWidth="10" strokeLinecap="round" strokeDasharray={`${frac * c} ${c}`} transform="rotate(-90 40 40)" />}
       <text x="40" y="47" textAnchor="middle" fontFamily="Fredoka, sans-serif" fontSize="22" fontWeight="600" fill="#F3F5FF">{value}/{target}</text>
     </svg>
   );
@@ -42,9 +42,12 @@ export function Ring({ value, target }: { value: number; target: number }) {
 
 export interface Series { values: { x: number; y: number }[]; color: string; dots?: boolean; width?: number }
 
-/** Small line chart; x values are day numbers, y in lb. */
-export function LineChart({ series, goal, height = 140, label }: { series: Series[]; goal?: number; height?: number; label: string }) {
-  const W = 320, H = height, pad = { l: 34, r: 8, t: 10, b: 18 };
+/** Day number (days since 1970, as the charts use) → "Nov 11". */
+export const dayLabel = (x: number) => new Date(x * 864e5).toLocaleDateString('en-CA', { month: 'short', day: 'numeric', timeZone: 'UTC' });
+
+/** Small line chart; x values are day numbers, y in lb. Pass xLabel to print dates under the chart. */
+export function LineChart({ series, goal, height = 140, label, xLabel }: { series: Series[]; goal?: number; height?: number; label: string; xLabel?: (x: number) => string }) {
+  const W = 320, H = height + (xLabel ? 14 : 0), pad = { l: 34, r: 12, t: 10, b: xLabel ? 32 : 18 };
   const all = series.flatMap((s) => s.values);
   if (all.length === 0) return <p className="muted small">No data yet.</p>;
   const ys = all.map((p) => p.y).concat(goal != null ? [goal] : []);
@@ -60,6 +63,9 @@ export function LineChart({ series, goal, height = 140, label }: { series: Serie
           <line x1={pad.l} x2={W - pad.r} y1={sy(v)} y2={sy(v)} stroke="#22346E" strokeWidth="1" />
           <text x={pad.l - 6} y={sy(v) + 4} textAnchor="end" fontSize="10" fill="#A9B3D6">{Math.round(v)}</text>
         </g>
+      ))}
+      {xLabel && [...new Set([x0, Math.round((x0 + x1) / 2), x1])].filter((x) => x1 > x0 || x === x0).map((x, i, arr) => (
+        <text key={x} x={sx(x)} y={H - 6} textAnchor={arr.length > 1 && i === 0 ? 'start' : i === arr.length - 1 && arr.length > 1 ? 'end' : 'middle'} fontSize="10" fill="#A9B3D6">{xLabel(x)}</text>
       ))}
       {goal != null && <line x1={pad.l} x2={W - pad.r} y1={sy(goal)} y2={sy(goal)} stroke="#FFB547" strokeWidth="1.5" strokeDasharray="5 5" />}
       {series.map((s, i) => (

@@ -1,4 +1,4 @@
-import { e1rm, streakWeeks, weekStart, liftSummary, heatmap, monthGrid, navyBodyFat, sevenDayAvg } from './stats';
+import { e1rm, streakWeeks, weekStart, liftSummary, heatmap, monthGrid, navyBodyFat, sevenDayAvg, stallSentence } from './stats';
 import { parseWorkout } from './parser';
 import type { Workout } from './store';
 
@@ -33,7 +33,11 @@ describe('stats', () => {
 
   it('flags a stalled lift', () => {
     const ws = ['2026-10-01', '2026-10-08', '2026-10-15', '2026-10-22'].map((d, i) => wk(d, `bench ${i === 0 ? 190 : 185}x6`));
-    expect(liftSummary(ws, 'bench-press', '2026-10-23').stalled).toBe(true);
+    const l = liftSummary(ws, 'bench-press', '2026-10-23');
+    expect(l.stalled).toBe(true);
+    expect(l.best).toBeGreaterThan(l.current!);
+    expect(l.bestDate).toBe('2026-10-01');
+    expect(stallSentence(l)).toMatch(/latest est\. 1RM is \d+ lb.*best of \d+ lb/);
   });
 
   it('builds heat map and month grid', () => {

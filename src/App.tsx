@@ -8,6 +8,7 @@ import { Progress } from './screens/Progress';
 import { Streak } from './screens/Streak';
 import { Me } from './screens/Me';
 import { WeightSheet } from './components/WeightSheet';
+import { LiftDetail } from './components/LiftDetail';
 import { Icon, Sheet } from './components/ui';
 
 type Tab = 'home' | 'progress' | 'streak' | 'me';
@@ -22,6 +23,7 @@ export function App() {
   const [tab, setTab] = useState<Tab>('home');
   const [logging, setLogging] = useState(false);
   const [weight, setWeight] = useState(false);
+  const [lift, setLift] = useState<string | null>(null);
   const active = useStore((s) => s.active);
   const [notice, setNotice] = useState<string | null>(null);
   const tz = useStore((s) => s.settings.tz);
@@ -46,12 +48,13 @@ export function App() {
 
   return (
     <div className="app">
-      {tab === 'home' && <Home onWeight={() => setWeight(true)} onGo={setTab} />}
-      {tab === 'progress' && <Progress onWeight={() => setWeight(true)} />}
+      {tab === 'home' && <Home onWeight={() => setWeight(true)} onGo={setTab} onLift={setLift} />}
+      {tab === 'progress' && <Progress onWeight={() => setWeight(true)} onLift={setLift} />}
       {tab === 'streak' && <Streak />}
       {tab === 'me' && <Me />}
 
-      <button className={`fab ${active ? 'live' : ''}`} aria-label={active ? 'Resume workout' : 'Log a workout'} onClick={() => setLogging(true)}>{Icon.plus}</button>
+      {/* Settings don't need the log button, and it covered text there. */}
+      {(tab !== 'me' || active) && <button className={`fab ${active ? 'live' : ''}`} aria-label={active ? 'Resume workout' : 'Log a workout'} onClick={() => setLogging(true)}>{Icon.plus}</button>}
 
       <nav className="nav" aria-label="Main">
         {TABS.map((t) => (
@@ -59,6 +62,7 @@ export function App() {
         ))}
       </nav>
 
+      {lift && <LiftDetail liftKey={lift} onClose={() => setLift(null)} />}
       {logging && <Logger onClose={() => setLogging(false)} />}
       {weight && <WeightSheet onClose={() => setWeight(false)} />}
       {notice && (

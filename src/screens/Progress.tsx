@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { actions, todayISO, useStore } from '../lib/store';
 import { addDays, allLiftKeys, durationMin, liftHistory, liftSummary, parseDate, setCount, sevenDayAvg, weeklyRate } from '../lib/stats';
 import { formatSet } from '../lib/parser';
-import { Icon, LineChart } from '../components/ui';
+import { Icon, LineChart, dayLabel } from '../components/ui';
 import { HrZones } from '../components/HrZones';
 import { EditWorkoutSheet } from '../components/EditWorkoutSheet';
 import { coachNote, weeklyNow } from '../lib/sync';
@@ -10,7 +10,7 @@ import type { Workout } from '../lib/store';
 
 const dayNum = (iso: string) => Math.round(+parseDate(iso) / 864e5);
 
-export function Progress({ onWeight }: { onWeight: () => void }) {
+export function Progress({ onWeight, onLift }: { onWeight: () => void; onLift: (key: string) => void }) {
   const s = useStore((x) => x);
   const today = todayISO();
   const [del, setDel] = useState<string | null>(null);
@@ -59,6 +59,7 @@ export function Progress({ onWeight }: { onWeight: () => void }) {
         </span>
         <LineChart
           label="Weight over the last 90 days"
+          xLabel={dayLabel}
           goal={s.settings.goalWeight}
           series={[
             { values: recentW.map((w) => ({ x: dayNum(w.date), y: w.weight })), color: '#A9B3D6', dots: true, width: 0 },
@@ -78,11 +79,15 @@ export function Progress({ onWeight }: { onWeight: () => void }) {
               <strong>{l.name}</strong>
               <button className="icon-btn" style={{ width: 40, height: 40, background: 'transparent' }} aria-label={pinned.has(l.key) ? `Unpin ${l.name} from Home` : `Pin ${l.name} to Home`} aria-pressed={pinned.has(l.key)} onClick={() => togglePin(l.key)}>{Icon.pin(pinned.has(l.key))}</button>
             </div>
-            <div className="row" style={{ gap: 14 }}>
-              <span className="mid">{sum.current ?? '—'}<span className="small muted"> lb est. 1RM</span></span>
-              {sum.stalled ? <span className="small warn">Stalled 3 sessions</span> : sum.change4w ? <span className={`small ${sum.change4w > 0 ? 'up' : 'warn'}`}>{sum.change4w > 0 ? '+' : ''}{sum.change4w} in 4 wks</span> : null}
-            </div>
-            {h.length > 1 ? <LineChart label={`${l.name} estimated 1RM over time`} height={100} series={[{ values: h.map((p) => ({ x: dayNum(p.date), y: p.e1rm })), color: '#FFB547', dots: true }]} /> : <span className="tiny muted">{h.length ? `Best set ${h[0].top}. A chart appears after your second session.` : 'Bodyweight only so far.'}</span>}
+            <button className="col" style={{ gap: 6, background: 'none', border: 'none', padding: 0, textAlign: 'left' }} onClick={() => onLift(l.key)} aria-label={`${l.name} details`}>
+              <div className="row" style={{ gap: 14, flexWrap: 'wrap' }}>
+                <span className="mid">{sum.current ?? '—'}<span className="small muted"> lb latest</span></span>
+                {sum.best != null && sum.best !== sum.current && <span className="small muted">best {sum.best}</span>}
+                {sum.stalled ? <span className="small warn">Stalled</span> : sum.change4w ? <span className={`small ${sum.change4w > 0 ? 'up' : 'warn'}`}>{sum.change4w > 0 ? '+' : ''}{sum.change4w} in 4 wks</span> : null}
+              </div>
+              {h.length > 1 ? <LineChart label={`${l.name} estimated 1RM by date`} height={100} xLabel={dayLabel} series={[{ values: h.map((p) => ({ x: dayNum(p.date), y: p.e1rm })), color: '#FFB547', dots: true }]} /> : <span className="tiny muted">{h.length ? `Best set ${h[0].top}. A chart appears after your second session.` : 'Bodyweight only so far.'}</span>}
+              <span className="tiny muted">Est. 1RM in lb. Tap for details.</span>
+            </button>
           </section>
         );
       })}

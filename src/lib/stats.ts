@@ -68,17 +68,29 @@ export interface LiftSummary {
   change4w: number | null;
   stalled: boolean;
   sessions: number;
+  /** Highest est. 1RM ever, and the session it came from. */
+  best: number | null;
+  bestDate: string | null;
 }
 
 export function liftSummary(workouts: Workout[], key: string, today = todayISO()): LiftSummary {
   const h = liftHistory(workouts, key);
   const name = workouts.flatMap((w) => w.exercises).find((e) => e.key === key)?.name ?? prettyKey(key);
-  if (!h.length) return { key, name, current: null, change4w: null, stalled: false, sessions: 0 };
+  if (!h.length) return { key, name, current: null, change4w: null, stalled: false, sessions: 0, best: null, bestDate: null };
   const current = h[h.length - 1].e1rm;
   const cutoff = addDays(today, -28);
   const before = h.filter((p) => p.date <= cutoff);
   const base = before.length ? before[before.length - 1].e1rm : h[0].e1rm;
-  return { key, name, current, change4w: h.length > 1 ? current - base : null, stalled: isStalled(h), sessions: h.length };
+  const top = h.reduce((a, p) => (p.e1rm >= a.e1rm ? p : a), h[0]);
+  return { key, name, current, change4w: h.length > 1 ? current - base : null, stalled: isStalled(h), sessions: h.length, best: top.e1rm, bestDate: top.date };
+}
+
+/** What to try when a lift stalls. Shown on Home, in the lift detail and in the rule-based coach note. */
+export const STALL_ADVICE = 'Try a lighter week, or switch the rep range for a few sessions.';
+
+/** One plain sentence explaining a stall, with both numbers labelled. */
+export function stallSentence(l: LiftSummary): string {
+  return `${l.name}: latest est. 1RM is ${l.current} lb, and you haven't beaten your best of ${l.best} lb in 3 sessions.`;
 }
 
 /** Stalled = the last 3 sessions never beat the best from before them. */
@@ -233,10 +245,7 @@ export function coachNote(s: State, today = todayISO()): string {
   const stalled = allLiftKeys(workouts)
     .map((l) => liftSummary(workouts, l.key, today))
     .find((l) => l.stalled);
-  if (stalled) {
-    const h = liftHistory(workouts, stalled.key);
-    return `${stalled.name} hasn't beaten ${Math.max(...h.slice(0, -3).map((p) => p.e1rm))} lb (est. 1RM) in 3 sessions. Try a lighter week, or switch the rep range for a few sessions.`;
-  }
+  if (stalled) return `${stallSentence(stalled)} ${STALL_ADVICE}`;
   const left = settings.weeklyTarget - weekCount(workouts, weekStart(parseDate(today)));
   if (left > 0) return `${left} more session${left > 1 ? 's' : ''} this week to hit your target of ${settings.weeklyTarget}.`;
   const up = allLiftKeys(workouts)

@@ -52,6 +52,7 @@ export interface Settings {
   pinned: string[]; // exercise keys
   reminderTime: string;
   maxHr?: number;
+  age?: number;
   tz?: string;
   notify?: Partial<Record<NotifyKind, boolean>>;
   avatar?: AvatarFeatures;
