@@ -53,6 +53,8 @@ export interface Settings {
   reminderTime: string;
   maxHr?: number;
   age?: number;
+  /** How body measurements and height are shown and typed. Stored values don't change. */
+  bodyUnit?: 'in' | 'cm';
   tz?: string;
   notify?: Partial<Record<NotifyKind, boolean>>;
   avatar?: AvatarFeatures;

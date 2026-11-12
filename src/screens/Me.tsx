@@ -9,22 +9,43 @@ import { GoogleCard } from '../components/GoogleCard';
 import { NotifyCard } from '../components/NotifyCard';
 import { avatarFromPhoto, useSyncStatus } from '../lib/sync';
 import { maxHrFromAge } from '../lib/zones';
+import { showHeight, showLen, toCm, toInches, type BodyUnit } from '../lib/units';
+
+/** Inches / cm switch. Changing it here changes it everywhere. */
+function UnitSwitch({ unit, onChange }: { unit: BodyUnit; onChange?: (u: BodyUnit) => void }) {
+  const pick = (u: BodyUnit) => { if (u !== unit) { actions.updateSettings({ bodyUnit: u }); onChange?.(u); } };
+  return (
+    <div className="seg" role="group" aria-label="Measurement units">
+      <button type="button" aria-pressed={unit === 'in'} onClick={() => pick('in')}>in</button>
+      <button type="button" aria-pressed={unit === 'cm'} onClick={() => pick('cm')}>cm</button>
+    </div>
+  );
+}
 
 const LABELS: Record<MeasureKey, string> = { neck: 'Neck', shoulders: 'Shoulders', chest: 'Chest', biceps: 'Biceps (flexed)', waist: 'Waist (at navel)', hips: 'Hips', thigh: 'Mid-thigh', calf: 'Calf' };
 
 function MeasureSheet({ onClose }: { onClose: () => void }) {
   const last = useStore((s) => s.measurements[s.measurements.length - 1]);
+  const unit = useStore((s) => s.settings.bodyUnit ?? 'in');
   const [date, setDate] = useState(todayISO());
-  const [vals, setVals] = useState<Record<MeasureKey, string>>(() => Object.fromEntries(MEASURE_KEYS.map((k) => [k, last ? String(last[k]) : ''])) as Record<MeasureKey, string>);
-  const nums = MEASURE_KEYS.map((k) => parseFloat(vals[k]));
-  const ok = nums.every((n) => n > 5 && n < 80);
+  const [vals, setVals] = useState<Record<MeasureKey, string>>(() => Object.fromEntries(MEASURE_KEYS.map((k) => [k, last ? String(showLen(last[k], unit)) : ''])) as Record<MeasureKey, string>);
+  const inches = MEASURE_KEYS.map((k) => toInches(parseFloat(vals[k]), unit));
+  const ok = inches.every((n) => n > 5 && n < 80);
+  // Switching units converts whatever is already typed, so nothing has to be re-entered.
+  const convert = (to: BodyUnit) => setVals(Object.fromEntries(MEASURE_KEYS.map((k) => {
+    const n = parseFloat(vals[k]);
+    return [k, Number.isFinite(n) ? String(showLen(toInches(n, unit), to)) : vals[k]];
+  })) as Record<MeasureKey, string>);
   return (
     <Sheet title="Log measurements" onClose={onClose}>
-      <p className="muted small" style={{ margin: 0 }}>Inches, in the morning before eating, tape snug but not tight. Same spots every 2 weeks.</p>
+      <div className="between">
+        <p className="muted small" style={{ margin: 0 }}>Morning, before eating. Tape snug, not tight.</p>
+        <UnitSwitch unit={unit} onChange={convert} />
+      </div>
       <div className="grid2" style={{ maxHeight: '48vh', overflowY: 'auto' }}>
         {MEASURE_KEYS.map((k) => (
           <div key={k} className="field">
-            <label htmlFor={`m-${k}`}>{LABELS[k]}</label>
+            <label htmlFor={`m-${k}`}>{LABELS[k]} ({unit})</label>
             <input id={`m-${k}`} className="input" inputMode="decimal" value={vals[k]} onChange={(e) => setVals({ ...vals, [k]: e.target.value })} />
           </div>
         ))}
@@ -34,7 +55,7 @@ function MeasureSheet({ onClose }: { onClose: () => void }) {
         </div>
       </div>
       <button className="btn big-btn" disabled={!ok} onClick={() => {
-        const m = { date, ...Object.fromEntries(MEASURE_KEYS.map((k, i) => [k, nums[i]])) } as Measurement;
+        const m = { date, ...Object.fromEntries(MEASURE_KEYS.map((k, i) => [k, Math.round(inches[i] * 100) / 100])) } as Measurement;
         actions.logMeasurement(m);
         onClose();
       }}>Save</button>
@@ -75,6 +96,7 @@ export function Me() {
   const startM = ms.length > 1 ? ms[0] : null;
   const bf = navyBodyFat(m, s.settings.heightCm);
   const set = s.settings;
+  const unit: BodyUnit = set.bodyUnit ?? 'in';
   // Older saves only kept max HR. If it came from the age formula, show that age back.
   const guessAge = set.maxHr ? Math.round((208 - set.maxHr) / 0.7) : undefined;
   const shownAge = set.age ?? (guessAge && maxHrFromAge(guessAge) === set.maxHr ? guessAge : undefined);
@@ -112,6 +134,25 @@ export function Me() {
           </div>
           {ms.length > 1 && <button className="btn ghost" aria-pressed={ghost} onClick={() => setGhost(!ghost)}>{ghost ? 'Hide start' : 'Compare to start'}</button>}
         </div>
+        {cur && (
+          <div className="col" style={{ gap: 6 }}>
+            <div className="between">
+              <span className="eyebrow">Measurements{startM && sel > 0 ? ' · change since start' : ''}</span>
+              <UnitSwitch unit={unit} />
+            </div>
+            <div className="grid2" style={{ rowGap: 4 }}>
+              {MEASURE_KEYS.map((k) => {
+                const d = startM && sel > 0 ? showLen(cur[k], unit) - showLen(startM[k], unit) : 0;
+                return (
+                  <div key={k} className="between small" style={{ borderTop: '1px solid #22346e', paddingTop: 4 }}>
+                    <span className="muted">{LABELS[k].replace(/ \(.*\)/, '')}</span>
+                    <span><strong>{showLen(cur[k], unit)}</strong> {unit}{d ? <span className={k === 'waist' ? (d < 0 ? 'up' : 'warn') : 'muted'}> {d > 0 ? '+' : ''}{Math.round(d * 10) / 10}</span> : null}</span>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
         <button className="btn big-btn" onClick={() => setSheet(true)}>{cur ? 'Log new measurements' : 'Add your measurements'}</button>
         {sync.email && (
           <>
@@ -138,8 +179,8 @@ export function Me() {
             </select>
           </div>
           <div className="field">
-            <label htmlFor="s-height">Height (cm)</label>
-            <input id="s-height" className="input" inputMode="decimal" defaultValue={set.heightCm} onBlur={(e) => { const n = parseFloat(e.target.value); if (n > 120 && n < 230) actions.updateSettings({ heightCm: n }); }} />
+            <label htmlFor="s-height">Height ({unit})</label>
+            <input id="s-height" className="input" inputMode="decimal" key={`h-${unit}`} defaultValue={showHeight(set.heightCm, unit)} onBlur={(e) => { const n = toCm(parseFloat(e.target.value), unit); if (n > 120 && n < 230) actions.updateSettings({ heightCm: Math.round(n * 10) / 10 }); }} />
           </div>
           <div className="field">
             <label htmlFor="s-age">Age</label>
@@ -153,6 +194,10 @@ export function Me() {
             <label htmlFor="s-rem">Weigh-in reminder</label>
             <input id="s-rem" className="input" type="time" value={set.reminderTime} onChange={(e) => actions.updateSettings({ reminderTime: e.target.value })} />
           </div>
+        </div>
+        <div className="between">
+          <span className="small" style={{ fontWeight: 800, color: 'var(--muted)' }}>Body measurements and height in</span>
+          <UnitSwitch unit={unit} />
         </div>
         <span className="tiny muted">Age sets your max heart rate (208 − 0.7 × age) for the heart-rate zones. Type a measured max instead if you know it.</span>
       </section>
