@@ -83,17 +83,24 @@ let findings;
 if (DRY) {
   findings = [{ title: 'Dry finding', kind: 'friction', severity: 2, runs: [reports[0].run], evidence: 'dry', impact: 'dry', effort: 'S', recommendation: 'dry', check: 'dry', reproduce: 'Open the app', seed: 'empty' }];
 } else {
-  const res = await client.messages.create({
-    model: MODEL,
-    max_tokens: 4000,
-    system: REVIEW_PROMPT,
-    tools: [SUBMIT],
-    tool_choice: { type: 'tool', name: 'submit_findings' },
-    messages: [{ role: 'user', content: JSON.stringify({ tasks, runs: evidence }) }],
-  });
-  const call = res.content.find((b) => b.type === 'tool_use');
+  // This model doesn't allow forcing a specific tool (tool_choice "tool"/"any"),
+  // so we ask nicely with "auto" and nudge once if it answers in prose instead.
+  const messages = [{ role: 'user', content: JSON.stringify({ tasks, runs: evidence }) }];
+  let call;
+  for (let attempt = 0; attempt < 2 && !call; attempt++) {
+    const res = await client.messages.create({
+      model: MODEL, max_tokens: 4000, system: REVIEW_PROMPT,
+      tools: [SUBMIT], tool_choice: { type: 'auto' }, messages,
+    });
+    reviewCost(res.usage);
+    call = res.content.find((b) => b.type === 'tool_use' && b.name === 'submit_findings');
+    if (!call) {
+      messages.push({ role: 'assistant', content: res.content });
+      messages.push({ role: 'user', content: 'Please submit your answer by calling submit_findings.' });
+    }
+  }
   findings = Array.isArray(call?.input?.findings) ? call.input.findings : [];
-  reviewCost(res.usage);
+  findings = findings.filter((f) => f && f.title && Array.isArray(f.runs));
 }
 
 // ---- 3. Rank: severity × how many runs saw it, divided by effort ----
