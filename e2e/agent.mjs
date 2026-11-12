@@ -82,6 +82,7 @@ async function runTask(task, client, browser) {
       tools: TOOL_DEFS,
       messages,
     });
+    if (res.stop_reason === 'max_tokens') console.log(`  step ${step}: reply was cut off at max_tokens`);
     if (res.usage) {
       usage.input += res.usage.input_tokens ?? 0;
       usage.output += res.usage.output_tokens ?? 0;
@@ -104,9 +105,16 @@ async function runTask(task, client, browser) {
         } else if (name === 'note') {
           const file = await snap(`${input.kind}`);
           notes.push({ ...input, step, screenshot: file });
+          console.log(`  note (${input.kind}, ${input.severity}): ${String(input.text).slice(0, 160)}`);
           content = 'Noted.';
         } else if (name === 'finish') {
-          result = input;
+          // Validate what the model sent instead of trusting it matches the schema.
+          console.log(`  finish: ${JSON.stringify(input).slice(0, 300)}`);
+          const lastThought = [...transcript].reverse().find((t) => t.thought)?.thought;
+          result = {
+            success: input.success === true || input.success === 'true',
+            summary: (typeof input.summary === 'string' && input.summary.trim()) || lastThought || '(The agent finished without a summary.)',
+          };
           await snap('end');
           content = 'Session ended.';
         } else content = await run(page, name, input);
@@ -163,7 +171,7 @@ for (const task of tasks) {
 await browser.close();
 
 const sev = ['', 'minor', 'noticeable', 'blocking'];
-const md = [`# Agent test run`, '', `| Task | Result | Steps | Notes | Cost |`, `| --- | --- | --- | --- | --- |`,
+const md = [`# Agent test run`, '', `| Task | Result | Actions | Notes | Cost |`, `| --- | --- | --- | --- | --- |`,
   ...reports.map((r) => `| ${r.task} | ${r.success ? 'passed' : 'failed'} | ${r.steps} | ${r.notes.length} | $${r.costUSD} |`), ''];
 for (const r of reports) {
   md.push(`## ${r.task}`, '', `**Goal:** ${r.goal}`, '', `**How it went:** ${r.summary}`, '');
