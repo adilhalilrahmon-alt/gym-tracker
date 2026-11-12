@@ -11,7 +11,9 @@
   --warn-bg: #3a2a2e;
   --warn-text: #ffd3ce;
   --radius: 20px;
-  --nav-h: 72px;
+  --nav-h: 62px;
+  /* Only part of the home-indicator area goes under the tabs, so the icons sit near the bar's middle. */
+  --nav-pad: calc(var(--safe-b) * .55);
   --safe-b: env(safe-area-inset-bottom, 0px);
   --safe-t: env(safe-area-inset-top, 0px);
   color-scheme: dark;
@@ -28,7 +30,7 @@ a { color: var(--gold); }
 
 .app { position: fixed; top: 0; left: 0; right: 0; height: var(--app-h, 100%); display: flex; flex-direction: column; position: relative; overflow: hidden; }
 .app::before { content: ''; position: absolute; width: 260px; height: 260px; border-radius: 50%; background: #1b2a5c; opacity: .55; top: -90px; right: -80px; pointer-events: none; z-index: 0; }
-.screen { flex: 1; overflow-y: auto; -webkit-overflow-scrolling: touch; padding: calc(18px + var(--safe-t)) 18px calc(var(--nav-h) + var(--safe-b) + 96px); display: flex; flex-direction: column; gap: 14px; position: relative; z-index: 1; }
+.screen { flex: 1; overflow-y: auto; -webkit-overflow-scrolling: touch; padding: calc(18px + var(--safe-t)) 18px calc(var(--nav-h) + var(--nav-pad) + 96px); display: flex; flex-direction: column; gap: 14px; position: relative; z-index: 1; }
 
 .row { display: flex; align-items: center; gap: 10px; }
 .between { display: flex; justify-content: space-between; align-items: center; gap: 10px; }
@@ -72,10 +74,10 @@ input.input[type='time']::-webkit-date-and-time-value { text-align: left; margin
 select.input { -webkit-appearance: none; appearance: none; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' fill='none' stroke='%23A9B3D6' stroke-width='2' stroke-linecap='round'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 14px center; padding-right: 34px; }
 textarea.input { height: auto; padding: 10px 12px; line-height: 1.45; resize: none; }
 
-.nav { position: absolute; left: 0; right: 0; bottom: 0; height: calc(var(--nav-h) + var(--safe-b)); padding-bottom: var(--safe-b); background: var(--nav); display: grid; grid-template-columns: repeat(4, 1fr); align-items: center; z-index: 5; }
-.nav button { background: none; border: none; color: var(--muted); display: flex; flex-direction: column; align-items: center; gap: 3px; font-size: 11px; font-weight: 800; height: 100%; }
+.nav { position: absolute; left: 0; right: 0; bottom: 0; height: calc(var(--nav-h) + var(--nav-pad)); padding-bottom: var(--nav-pad); background: var(--nav); display: grid; grid-template-columns: repeat(4, 1fr); align-items: stretch; z-index: 5; }
+.nav button { background: none; border: none; color: var(--muted); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; padding: 0; font-size: 11px; font-weight: 800; height: 100%; }
 .nav button[aria-current='page'] { color: var(--gold); }
-.fab { position: absolute; right: 20px; bottom: calc(var(--nav-h) + var(--safe-b) + 18px); width: 64px; height: 64px; border-radius: 50%; border: none; background: var(--gold); display: grid; place-items: center; box-shadow: 0 0 0 6px rgba(255, 181, 71, .18), 0 10px 24px rgba(0, 0, 0, .45); z-index: 6; }
+.fab { position: absolute; right: 20px; bottom: calc(var(--nav-h) + var(--nav-pad) + 18px); width: 64px; height: 64px; border-radius: 50%; border: none; background: var(--gold); display: grid; place-items: center; box-shadow: 0 0 0 6px rgba(255, 181, 71, .18), 0 10px 24px rgba(0, 0, 0, .45); z-index: 6; }
 .fab.live { background: var(--coral); box-shadow: 0 0 0 6px rgba(255, 107, 94, .2), 0 10px 24px rgba(0, 0, 0, .45); }
 
 .overlay { position: absolute; inset: 0; background: var(--bg); z-index: 10; display: flex; flex-direction: column; }
