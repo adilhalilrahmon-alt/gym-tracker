@@ -25,55 +25,97 @@ function smooth(pts: Pt[], closed: boolean) {
   }
   return d + (closed ? ' Z' : '');
 }
+/** Width of the front drawing's viewBox. The figure is centred at FC. */
+export const FRONT_W = 230;
+const FC = FRONT_W / 2;
+
+/**
+ * Front view as a cartoon muscle figure. The arms hang a little away from the body so the
+ * shoulders and arms read clearly. Every width comes from a tape measurement; body fat only
+ * changes how sharply the muscles are outlined.
+ */
 export function front(m: M, bf: number) {
-  var c = 100;
+  var c = FC;
   var nW = cw(m.neck), shW = ew(m.shoulders, 1.6), chW = ew(m.chest, 1.35), waW = ew(m.waist, 1.3), hiW = ew(m.hips, 1.2);
   var thW = cw(m.thigh), caW = cw(m.calf), knW = cw(14.5 + (m.thigh - 23) * 0.2), ankW = cw(9);
-  var legC = hiW / 2 - thW / 2, lc = legC * 0.85;
-  var R: Pt[] = [
-    [nW / 2, Y(.10)], [nW / 2 * 1.02, Y(.14)], [nW / 2 * 1.3, Y(.158)], [shW * 0.3, Y(.178)], [shW / 2 * 0.84, Y(.197)],
-    [chW / 2, Y(.25)], [chW / 2 * 0.98, Y(.30)], [lerp(chW, waW, .6) / 2, Y(.35)], [waW / 2, Y(.40)],
-    [hiW / 2 * 0.97, Y(.46)], [hiW / 2, Y(.50)], [legC + thW / 2, Y(.56)], [legC * 0.95 + thW / 2 * 0.88, Y(.64)],
-    [lc + knW / 2, Y(.72)], [lc + caW / 2 + 1, Y(.79)], [lc + ankW / 2 + 1, Y(.93)], [lc + ankW / 2 + 5, Y(.985)],
-    [lc - ankW / 2, Y(.99)], [lc - ankW / 2 + 1, Y(.93)], [lc - caW / 2 * 0.85, Y(.80)], [lc - knW / 2, Y(.72)],
-    [Math.max(legC * 0.95 - thW / 2 * 0.88, 1.5), Y(.62)], [Math.max(legC - thW / 2, 1), Y(.56)], [0, Y(.535)]
+  var bW = cw(m.biceps) * 1.02, eW = cw(m.biceps * 0.74), fW = cw(m.biceps * 0.86), wW = cw(6.8);
+  // How sharply muscles show: fully at ~13% body fat and below, gone by ~22%.
+  var def = clamp((22 - bf) / 9, 0, 1);
+  var legC = Math.max(hiW / 2 - thW / 2, thW * 0.42), lk = legC * 0.84, la = legC * 0.9;
+  var P = function (px: number, fr: number): Pt { return [c + px, Y(fr)]; };
+  var mirror = function (pts: Pt[]): Pt[] { return pts.map(function (p: Pt): Pt { return [2 * c - p[0], p[1]]; }); };
+  var both = function (pts: Pt[], closed: boolean) { return [smooth(pts, closed), smooth(mirror(pts), closed)]; };
+  var line = function (a: Pt, q: Pt, b: Pt) { return 'M' + r1(a[0]) + ' ' + r1(a[1]) + ' Q' + r1(q[0]) + ' ' + r1(q[1]) + ' ' + r1(b[0]) + ' ' + r1(b[1]); };
+  var lines2 = function (a: Pt, q: Pt, b: Pt) { var mm = mirror([a, q, b]); return line(a, q, b) + ' ' + line(mm[0], mm[1], mm[2]); };
+
+  // ---- torso (neck to crotch), mirrored ----
+  var T: Pt[] = [
+    P(nW * 0.46, .105), P(nW * 0.5, .14), P(nW / 2 + (shW / 2 - nW / 2) * 0.42, .16), P(shW / 2 * 0.8, .177), P(shW / 2 * 0.86, .2),
+    P(chW / 2, .245), P(chW / 2 * 0.99, .28), P(lerp(chW, waW, .55) / 2, .34), P(waW / 2, .40), P(lerp(waW, hiW, .55) / 2, .44),
+    P(hiW / 2, .48), P(hiW / 2 * 0.97, .515), P(hiW * 0.1, .54), P(0, .545)
   ];
-  var pts = R.map(function (p: Pt): Pt { return [c + p[0], p[1]]; });
-  var L = R.slice(0, R.length - 1).reverse().map(function (p: Pt): Pt { return [c - p[0], p[1]]; });
-  var body = smooth(pts.concat(L), true);
-  var bicW = cw(m.biceps) * 1.05, foreW = cw(m.biceps * 0.86), wrW = cw(6.8), elbW = cw(m.biceps * 0.78);
-  var ex = shW / 2 - bicW * 0.42, wx = ex + 2;
-  var A: Pt[] = [
-    [shW / 2 * 0.66, Y(.19)], [shW / 2 * 0.9, Y(.192)], [shW / 2 + bicW * 0.06, Y(.212)], [shW / 2 + bicW * 0.08, Y(.24)], [ex + bicW / 2 + 1, Y(.29)],
-    [ex + elbW / 2, Y(.38)], [wx + foreW / 2, Y(.42)], [wx + wrW / 2, Y(.50)], [wx + wrW / 2 + 1, Y(.545)],
-    [wx, Y(.578)], [wx - wrW / 2 - 1, Y(.545)], [wx - wrW / 2, Y(.50)], [wx - foreW / 2 + 1, Y(.42)],
-    [ex - elbW / 2, Y(.38)], [ex - bicW / 2, Y(.29)], [ex - bicW * 0.4, Y(.235)]
+  var torso = smooth(T.concat(mirror(T.slice(0, -1)).reverse()), true);
+
+  // ---- legs ----
+  var LG: Pt[] = [
+    P(legC + thW * 0.5, .49), P(legC + thW * 0.53, .56), P(legC * 0.96 + thW * 0.46, .63), P(lk + knW * 0.5, .715),
+    P(lk + caW * 0.5, .775), P(lk + caW * 0.42, .83), P(la + ankW * 0.48, .925), P(la + ankW * 0.58, .968), P(la + ankW * 0.62 + IN * 0.6, .99),
+    P(la - ankW * 0.55, .992), P(la - ankW * 0.52, .955), P(la - ankW * 0.48, .925), P(lk - caW * 0.57, .80), P(lk - caW * 0.5, .762),
+    P(lk - knW * 0.5, .72), P(legC * 0.95 - thW * 0.47, .64), P(legC - thW * 0.5, .55), P(legC - thW * 0.42, .5)
   ];
-  var armR = smooth(A.map(function (p: Pt): Pt { return [c + p[0], p[1]]; }), true);
-  var armL = smooth(A.map(function (p: Pt): Pt { return [c - p[0], p[1]]; }), true);
-  var def = clamp((20 - bf) / 8, 0, 1);
-  var pec = 'M' + r1(c + 2) + ' ' + r1(Y(.288)) + ' Q' + r1(c + chW * 0.3) + ' ' + r1(Y(.31)) + ' ' + r1(c + chW * 0.43) + ' ' + r1(Y(.255)) +
-    ' M' + r1(c - 2) + ' ' + r1(Y(.288)) + ' Q' + r1(c - chW * 0.3) + ' ' + r1(Y(.31)) + ' ' + r1(c - chW * 0.43) + ' ' + r1(Y(.255));
-  var midline = 'M' + c + ' ' + r1(Y(.305)) + ' L' + c + ' ' + r1(Y(.43));
-  var abs = '';
-  [.335, .365, .395].forEach(function (fy: number) {
-    var hw = waW * 0.19;
-    abs += ' M' + r1(c - hw) + ' ' + r1(Y(fy) + 1) + ' Q' + c + ' ' + r1(Y(fy) - 1.5) + ' ' + r1(c + hw) + ' ' + r1(Y(fy) + 1);
+  var legs = both(LG, true);
+  var vmo = both([P(lk - knW * 0.12, .655), P(lk - knW * 0.46, .682), P(lk - knW * 0.22, .708), P(lk + knW * 0.02, .69)], true);
+  var calfIn = both([P(lk - caW * 0.1, .752), P(lk - caW * 0.52, .79), P(lk - caW * 0.3, .835), P(lk - caW * 0.06, .8)], true);
+  var calfOut = both([P(lk + caW * 0.16, .756), P(lk + caW * 0.45, .786), P(lk + caW * 0.3, .826), P(lk + caW * 0.14, .795)], true);
+  var legLines =
+    lines2(P(legC + thW * 0.16, .555), P(legC + thW * 0.42, .63), P(lk + knW * 0.3, .70)) + ' ' +
+    lines2(P(legC - thW * 0.12, .56), P(legC * 0.95 - thW * 0.05, .64), P(lk + knW * 0.02, .695)) + ' ' +
+    lines2(P(lk - knW * 0.28, .727), P(lk, .742), P(lk + knW * 0.28, .727)) + ' ' +
+    lines2(P(lk + caW * 0.06, .76), P(lk + caW * 0.1, .84), P(la + ankW * 0.12, .905));
+
+  // ---- chest and abs ----
+  var pec = both([P(IN * 0.3, .196), P(nW * 0.62, .19), P(shW / 2 * 0.62, .2), P(shW / 2 * 0.7, .226), P(chW / 2 * 0.9, .262), P(chW * 0.32, .29), P(chW * 0.14, .298), P(IN * 0.3, .288)], true);
+  var aw = lerp(waW, chW, .3) * 0.19, g = IN * 0.28;
+  var abs: string[] = [];
+  [[.302, .334, .95], [.339, .371, 1], [.376, .406, 1]].forEach(function (r: number[]) {
+    var w = aw * r[2];
+    abs = abs.concat(both([P(g, r[0] + .003), P(w, r[0]), P(w * 1.03, (r[0] + r[1]) / 2), P(w * 0.95, r[1]), P(g, r[1] + .002)], true));
   });
-  var vline = 'M' + r1(c + waW * 0.42) + ' ' + r1(Y(.41)) + ' Q' + r1(c + waW * 0.32) + ' ' + r1(Y(.45)) + ' ' + r1(c + waW * 0.16) + ' ' + r1(Y(.475)) +
-    ' M' + r1(c - waW * 0.42) + ' ' + r1(Y(.41)) + ' Q' + r1(c - waW * 0.32) + ' ' + r1(Y(.45)) + ' ' + r1(c - waW * 0.16) + ' ' + r1(Y(.475));
-  var quads = '';
-  [1, -1].forEach(function (s: number) {
-    quads += ' M' + r1(c + s * (legC - thW * 0.05)) + ' ' + r1(Y(.61)) + ' Q' + r1(c + s * (legC - thW * 0.32)) + ' ' + r1(Y(.68)) + ' ' + r1(c + s * (lc - knW * 0.12)) + ' ' + r1(Y(.705));
-  });
-  var delts = '';
-  [1, -1].forEach(function (s: number) {
-    delts += ' M' + r1(c + s * (shW / 2 * 0.8)) + ' ' + r1(Y(.2)) + ' Q' + r1(c + s * (ex - bicW * 0.1)) + ' ' + r1(Y(.23)) + ' ' + r1(c + s * (ex + bicW * 0.35)) + ' ' + r1(Y(.26));
-  });
+  abs = abs.concat(both([P(g, .411), P(aw * 0.92, .411), P(aw * 0.8, .44), P(aw * 0.45, .462), P(g, .468)], true));
+  var torsoLines =
+    lines2(P(IN * 0.4, .188), P(shW / 2 * 0.4, .181), P(shW / 2 * 0.7, .179)) + ' ' + // collarbones
+    lines2(P(nW * 0.42, .115), P(nW * 0.3, .15), P(IN * 0.45, .185)); // neck
+  var fine =
+    lines2(P(chW / 2 * 0.93, .282), P(chW / 2 * 0.86, .287), P(chW / 2 * 0.8, .296)) + ' ' +
+    lines2(P(chW / 2 * 0.94, .3), P(chW / 2 * 0.87, .305), P(chW / 2 * 0.81, .314)) + ' ' +
+    lines2(P(chW / 2 * 0.93, .318), P(chW / 2 * 0.87, .323), P(chW / 2 * 0.82, .332)) + ' ' + // serratus
+    lines2(P(waW * 0.43, .43), P(waW * 0.3, .47), P(waW * 0.13, .5)); // V lines
+
+  // ---- arms (built for the right side, then mirrored) ----
+  var a1 = 19 * PI / 180, a2 = 11 * PI / 180, L1 = 0.17 * H, L2 = 0.14 * H, h = 0.072 * H;
+  var S: Pt = [c + shW / 2 - bW * 0.52, Y(.192)];
+  var up = function (v: number, u: number): Pt { return [S[0] + v * Math.sin(a1) + u * Math.cos(a1), S[1] + v * Math.cos(a1) - u * Math.sin(a1)]; };
+  var E = up(L1, 0);
+  var fo = function (v: number, u: number): Pt { return [E[0] + v * Math.sin(a2) + u * Math.cos(a2), E[1] + v * Math.cos(a2) - u * Math.sin(a2)]; };
+  var upper = both([up(0.02 * L1, bW * 0.5), up(0.4 * L1, bW * 0.54), up(0.75 * L1, bW * 0.47), up(L1, eW * 0.52), up(L1 * 1.04, 0), up(L1, -eW * 0.52), up(0.62 * L1, -bW * 0.5), up(0.3 * L1, -bW * 0.44), up(0.02 * L1, -bW * 0.38)], true);
+  var fore = both([fo(-0.06 * L2, eW * 0.5), fo(0.2 * L2, fW * 0.55), fo(0.6 * L2, fW * 0.42), fo(L2, wW * 0.5), fo(L2, -wW * 0.5), fo(0.55 * L2, -fW * 0.4), fo(0.18 * L2, -fW * 0.5), fo(-0.06 * L2, -eW * 0.5)], true);
+  var hand = both([fo(L2 - 1, wW * 0.52), fo(L2 + 0.45 * h, wW * 0.66), fo(L2 + 0.85 * h, wW * 0.5), fo(L2 + h, 0), fo(L2 + 0.85 * h, -wW * 0.42), fo(L2 + 0.5 * h, -wW * 0.72), fo(L2 + 0.22 * h, -wW * 0.62), fo(L2 - 1, -wW * 0.52)], true);
+  var biceps = both([up(0.26 * L1, -bW * 0.36), up(0.55 * L1, -bW * 0.48), up(0.86 * L1, -bW * 0.2), up(0.62 * L1, bW * 0.14), up(0.34 * L1, bW * 0.06)], true);
+  var delt = both([[c + shW / 2 * 0.64, Y(.18)], [c + shW / 2 * 0.9, Y(.176)], [c + shW / 2 + IN * 0.15, Y(.205)], up(0.33 * L1, bW * 0.58), up(0.48 * L1, bW * 0.12), up(0.22 * L1, -bW * 0.42), [c + shW / 2 * 0.66, Y(.226)]], true);
+  var armLines =
+    lines2(up(0.36 * L1, bW * 0.3), up(0.6 * L1, bW * 0.33), up(0.86 * L1, bW * 0.24)) + ' ' + // triceps
+    lines2(fo(0.02 * L2, eW * 0.1), fo(0.25 * L2, fW * 0.3), fo(0.58 * L2, fW * 0.28)) + ' ' + // forearm
+    lines2([c + shW / 2 * 0.86, Y(.19)], up(0.2 * L1, bW * 0.25), up(0.46 * L1, bW * 0.14)); // delt heads
+
+  var majorO = r1(0.45 + 0.5 * def);
   return {
-    body: body, armR: armR, armL: armL, pec: pec, midline: midline, abs: abs, vline: vline, quads: quads, delts: delts,
-    pecO: r1(0.3 + 0.5 * def), absO: r1(0.75 * def), vO: r1(0.8 * def), quadO: r1(0.6 * def), deltO: r1(0.2 + 0.5 * def),
-    shortsY: r1(Y(.465)), shortsH: r1(Y(.6) - Y(.465))
+    W: FRONT_W, c: c, torso: torso, legs: legs, upper: upper, fore: fore, hand: hand,
+    muscles: { pec: pec, delt: delt, biceps: biceps, vmo: vmo, calfIn: calfIn, calfOut: calfOut },
+    abs: abs, absFill: r1(def), absO: r1(0.85 * def),
+    lines: { major: armLines + ' ' + torsoLines, legs: legLines, fine: fine },
+    majorO: majorO, legO: r1(0.15 + 0.7 * def), fineO: r1(0.7 * def),
+    trunks: smooth([P(-hiW / 2 - 1, .485), P(hiW / 2 + 1, .485), P(legC + thW * 0.6, .557), P(legC - thW * 0.55, .562), P(0, .55), P(-(legC - thW * 0.55), .562), P(-(legC + thW * 0.6), .557)], true),
+    shortsY: r1(Y(.485)), shortsH: r1(Y(.557) - Y(.485))
   };
 }
 export function side(m: M, bf: number) {
@@ -92,11 +134,20 @@ export function side(m: M, bf: number) {
   ];
   var bD = cw(m.biceps) * 0.95, eD = cw(m.biceps * 0.78), fD = cw(m.biceps * 0.86), wD = cw(6.8), ax = c - 2;
   var A: Pt[] = [
-    [ax, Y(.175)], [ax + bD * 0.42, Y(.21)], [ax + bD * 0.55, Y(.29)], [ax + eD * 0.5, Y(.38)], [ax + fD * 0.5 + 1, Y(.42)],
-    [ax + wD * 0.5 + 2, Y(.50)], [ax + 2, Y(.578)], [ax - wD * 0.5, Y(.50)], [ax - fD * 0.45, Y(.43)],
-    [ax - eD * 0.5, Y(.38)], [ax - bD * 0.5, Y(.29)], [ax - bD * 0.45, Y(.20)]
+    [ax - bD * 0.3, Y(.178)], [ax + bD * 0.3, Y(.18)], [ax + bD * 0.5, Y(.24)], [ax + bD * 0.56, Y(.295)], [ax + eD * 0.5, Y(.37)],
+    [ax + fD * 0.58 + 1, Y(.41)], [ax + fD * 0.42 + 1, Y(.46)], [ax + wD * 0.5 + 1.5, Y(.5)], [ax + wD * 0.62 + 1.5, Y(.53)],
+    [ax + wD * 0.3 + 1, Y(.565)], [ax - wD * 0.35, Y(.56)], [ax - wD * 0.55, Y(.525)], [ax - wD * 0.5, Y(.49)],
+    [ax - fD * 0.48, Y(.425)], [ax - eD * 0.55, Y(.37)], [ax - bD * 0.56, Y(.29)], [ax - bD * 0.52, Y(.22)]
   ];
-  return { body: smooth(P, true), arm: smooth(A, true) };
+  var dD = bD * 1.05;
+  var delt = smooth([[ax - dD * 0.5, Y(.19)], [ax - dD * 0.1, Y(.172)], [ax + dD * 0.45, Y(.185)], [ax + dD * 0.5, Y(.225)], [ax + bD * 0.1, Y(.262)], [ax - dD * 0.45, Y(.235)]], true);
+  var biceps = smooth([[ax + bD * 0.1, Y(.24)], [ax + bD * 0.55, Y(.29)], [ax + eD * 0.3, Y(.36)], [ax + bD * 0.05, Y(.3)]], true);
+  var def = clamp((22 - bf) / 9, 0, 1);
+  var lines = 'M' + r1(c + chD * 0.3) + ' ' + r1(Y(.21)) + ' Q' + r1(c + chD * 0.56) + ' ' + r1(Y(.25)) + ' ' + r1(c + chD * 0.42) + ' ' + r1(Y(.29)) + // pec
+    ' M' + r1(c - hiD * 0.5) + ' ' + r1(Y(.5)) + ' Q' + r1(c - hiD * 0.35) + ' ' + r1(Y(.55)) + ' ' + r1(c - thD * 0.3) + ' ' + r1(Y(.56)) + // glute
+    ' M' + r1(c - caD * 0.2) + ' ' + r1(Y(.75)) + ' Q' + r1(c - caD * 0.62) + ' ' + r1(Y(.79)) + ' ' + r1(c - caD * 0.3) + ' ' + r1(Y(.85)) + // calf
+    ' M' + r1(c + thD * 0.35) + ' ' + r1(Y(.58)) + ' Q' + r1(c + thD * 0.5) + ' ' + r1(Y(.65)) + ' ' + r1(c + knD * 0.3) + ' ' + r1(Y(.70)); // quad
+  return { body: smooth(P, true), arm: smooth(A, true), delt: delt, biceps: biceps, lines: lines, lineO: r1(0.45 + 0.5 * def) };
 }
 
 export const SAMPLE: M = { neck: 15.5, shoulders: 47, chest: 40, biceps: 14, waist: 34, hips: 39, thigh: 23, calf: 15 };

@@ -1,4 +1,4 @@
-import { front, side, setHeightCm } from '../lib/avatar';
+import { FRONT_W, front, side, setHeightCm } from '../lib/avatar';
 import type { AvatarFeatures, MeasureKey } from '../lib/store';
 
 type M = Record<MeasureKey, number>;
@@ -63,30 +63,68 @@ function Face({ look }: { look: AvatarFeatures }) {
   );
 }
 
+/** A body part: skin fill, a soft shadow just inside its edge, then a cartoon outline. */
+function Part({ d, id, skin, dark, line, rim = 7 }: { d: string; id: string; skin: string; dark: string; line: string; rim?: number }) {
+  return (
+    <>
+      <clipPath id={id}><path d={d} /></clipPath>
+      <path d={d} fill={skin} />
+      <path d={d} fill="none" stroke={dark} strokeWidth={rim} opacity="0.32" clipPath={`url(#${id})`} />
+      <path d={d} fill="none" stroke={line} strokeWidth="1.5" strokeLinejoin="round" />
+    </>
+  );
+}
+
+/** A muscle: lit from the top left, so each one reads as its own rounded shape. */
+function Muscle({ d, grad, line, o }: { d: string; grad: string; line: string; o: number }) {
+  return <path d={d} fill={`url(#${grad})`} stroke={line} strokeWidth="1.2" strokeOpacity={o} strokeLinejoin="round" />;
+}
+
 export function FrontAvatar({ m, bf, ghost, height = 300, id = 'f', look = DEFAULT_LOOK }: { m: M; bf: number; ghost?: M | null; height?: number; id?: string; look?: AvatarFeatures }) {
   const fr = front(m, bf);
-  const arm = shade(look.skin, -0.05), line = shade(look.skin, -0.22);
+  const skin = look.skin;
+  const light = shade(skin, 0.16), dark = shade(skin, -0.3), line = shade(skin, -0.55);
   const gf = ghost ? front(ghost, bf) : null;
+  const g = `${id}-mus`, ga = `${id}-abs`;
+  const mus = (ds: string[], k: string) => ds.map((d, i) => <Muscle key={k + i} d={d} grad={g} line={line} o={fr.majorO} />);
+  const parts = (ds: string[], k: string) => ds.map((d, i) => <Part key={k + i} d={d} id={`${id}-${k}${i}`} skin={skin} dark={dark} line={line} />);
+  const offset = (FRONT_W - 200) / 2; // the face is drawn for a 200-wide box
   return (
-    <svg role="img" aria-label="Front view of your avatar, drawn to scale from your measurements" height={height} width={(height * 200) / 372} viewBox="0 0 200 372">
-      <defs><clipPath id={`clip-${id}`}><path d={fr.body} /></clipPath></defs>
-      <ellipse cx="100" cy="368" rx="44" ry="4" fill="#0B1530" />
-      <path d={fr.body} fill={look.skin} />
-      <rect x="0" y={fr.shortsY} width="200" height={fr.shortsH} fill="#2B4285" clipPath={`url(#clip-${id})`} />
-      <g fill="none" stroke={line} strokeWidth="1.6" strokeLinecap="round">
-        <path d={fr.pec} opacity={fr.pecO} />
-        <path d={fr.midline} opacity={fr.absO} />
-        <path d={fr.abs} opacity={fr.absO} />
-        <path d={fr.vline} opacity={fr.vO} />
-        <path d={fr.quads} opacity={fr.quadO} />
-      </g>
-      <path d={fr.armR} fill={arm} />
-      <path d={fr.armL} fill={arm} />
-      <path d={fr.delts} fill="none" stroke={line} strokeWidth="1.4" strokeLinecap="round" opacity={fr.deltO} />
-      <Face look={look} />
+    <svg role="img" aria-label="Front view of your avatar, drawn to scale from your measurements" height={height} width={(height * FRONT_W) / 372} viewBox={`0 0 ${FRONT_W} 372`}>
+      <defs>
+        <linearGradient id={g} x1="0" y1="0" x2="0.9" y2="1">
+          <stop offset="0" stopColor={light} /><stop offset="0.5" stopColor={skin} /><stop offset="1" stopColor={shade(skin, -0.16)} />
+        </linearGradient>
+        <linearGradient id={ga} x1="0" y1="0" x2="0.6" y2="1">
+          <stop offset="0" stopColor={light} stopOpacity={fr.absFill} /><stop offset="1" stopColor={shade(skin, -0.14)} stopOpacity={fr.absFill} />
+        </linearGradient>
+        <clipPath id={`${id}-trunkclip`}><path d={fr.torso} />{fr.legs.map((d, i) => <path key={i} d={d} />)}</clipPath>
+      </defs>
+      <ellipse cx={fr.c} cy="368" rx="48" ry="4" fill="#0B1530" />
+
+      {parts(fr.legs, 'leg')}
+      {[...fr.muscles.vmo, ...fr.muscles.calfIn, ...fr.muscles.calfOut].map((d, i) => <Muscle key={'lm' + i} d={d} grad={g} line={line} o={fr.legO} />)}
+      <path d={fr.lines.legs} fill="none" stroke={line} strokeWidth="1.1" strokeLinecap="round" opacity={fr.legO} />
+
+      <Part d={fr.torso} id={`${id}-torso`} skin={skin} dark={dark} line={line} rim={9} />
+      {fr.abs.map((d, i) => <path key={'ab' + i} d={d} fill={`url(#${ga})`} stroke={line} strokeWidth="1.1" strokeOpacity={fr.absO} />)}
+      {mus(fr.muscles.pec, 'pec')}
+      <path d={fr.lines.fine} fill="none" stroke={line} strokeWidth="1.1" strokeLinecap="round" opacity={fr.fineO} />
+
+      <path d={fr.trunks} fill="#2B4285" clipPath={`url(#${id}-trunkclip)`} />
+      <path d={fr.trunks} fill="none" stroke="#1B2A5C" strokeWidth="1.2" clipPath={`url(#${id}-trunkclip)`} />
+
+      {parts(fr.fore, 'fore')}
+      {parts(fr.hand, 'hand')}
+      {parts(fr.upper, 'up')}
+      {mus(fr.muscles.biceps, 'bi')}
+      {mus(fr.muscles.delt, 'delt')}
+      <path d={fr.lines.major} fill="none" stroke={line} strokeWidth="1.2" strokeLinecap="round" opacity={fr.majorO} />
+
+      <g transform={`translate(${offset} 0)`}><Face look={look} /></g>
       {gf && (
-        <g fill="none" stroke="#36D6C3" strokeWidth="1.6" strokeDasharray="4 4" opacity="0.75">
-          <path d={gf.body} /><path d={gf.armR} /><path d={gf.armL} />
+        <g fill="none" stroke="#36D6C3" strokeWidth="1.6" strokeDasharray="4 4" opacity="0.8">
+          <path d={gf.torso} />{[...gf.legs, ...gf.upper, ...gf.fore, ...gf.muscles.delt].map((d, i) => <path key={i} d={d} />)}
         </g>
       )}
     </svg>
@@ -97,15 +135,24 @@ export function SideAvatar({ m, bf, ghost, height = 300, id = 's', look = DEFAUL
   const sd = side(m, bf);
   const gs = ghost ? side(ghost, bf) : null;
   const fr = front(m, bf);
-  const arm = shade(look.skin, -0.08);
+  const arm = shade(look.skin, -0.04);
+  const dark = shade(look.skin, -0.3), line = shade(look.skin, -0.55), light = shade(look.skin, 0.16);
   return (
     <svg role="img" aria-label="Side view of your avatar, drawn to scale from your measurements" height={height} width={(height * 140) / 372} viewBox="0 0 140 372">
-      <defs><clipPath id={`clip-${id}`}><path d={sd.body} /></clipPath></defs>
+      <defs>
+        <clipPath id={`clip-${id}`}><path d={sd.body} /></clipPath>
+        <linearGradient id={`${id}-mus`} x1="0" y1="0" x2="0.9" y2="1"><stop offset="0" stopColor={light} /><stop offset="0.5" stopColor={look.skin} /><stop offset="1" stopColor={shade(look.skin, -0.16)} /></linearGradient>
+      </defs>
       <ellipse cx="66" cy="368" rx="34" ry="4" fill="#0B1530" />
       {look.hairStyle === 'long' && <path d="M44 22 C44 8 54 2 64 2 C74 2 80 8 81 16 L60 18 C56 30 52 40 50 48 C44 46 42 34 44 22 Z" fill={look.hair} />}
       <path d={sd.body} fill={look.skin} />
+      <path d={sd.body} fill="none" stroke={dark} strokeWidth="9" opacity="0.32" clipPath={`url(#clip-${id})`} />
+      <path d={sd.lines} fill="none" stroke={line} strokeWidth="1.2" strokeLinecap="round" opacity={sd.lineO} />
       <rect x="0" y={fr.shortsY} width="140" height={fr.shortsH} fill="#2B4285" clipPath={`url(#clip-${id})`} />
-      <path d={sd.arm} fill={arm} />
+      <path d={sd.body} fill="none" stroke={line} strokeWidth="1.5" strokeLinejoin="round" />
+      <Part d={sd.arm} id={`${id}-arm`} skin={arm} dark={dark} line={line} />
+      <path d={sd.biceps} fill={`url(#${id}-mus)`} stroke={line} strokeWidth="1.2" strokeOpacity={sd.lineO} />
+      <path d={sd.delt} fill={`url(#${id}-mus)`} stroke={line} strokeWidth="1.2" strokeOpacity={sd.lineO} />
       <ellipse cx="63" cy="25" rx="19" ry="22" fill={look.skin} />
       <path d="M81 24 L86 30 L81 31 Z" fill={look.skin} />
       {look.hairStyle !== 'bald' && <path d={look.hairStyle === 'buzz' ? 'M46 20 C46 8 55 4 64 4 C73 4 79 9 80 15 C72 12 62 13 56 18 C52 21 49 24 47 27 C46 25 46 22 46 20 Z' : 'M44 24 C44 8 54 2 64 2 C74 2 80 8 81 16 C72 12 62 14 56 20 C52 24 50 30 48 34 C45 31 44 28 44 24 Z'} fill={look.hair} opacity={look.hairStyle === 'buzz' ? 0.85 : 1} />}
