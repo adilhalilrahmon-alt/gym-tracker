@@ -2,7 +2,7 @@
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import { useSyncExternalStore } from 'react';
 import { APP_URL, SUPABASE_KEY, SUPABASE_URL } from './config';
-import { actions, getState, onLocalChange, setState } from './store';
+import { actions, getState, onLocalChange, rematch, setState } from './store';
 import { collectPush, mergeRemote, type Remote } from './merge';
 
 export interface GoogleStatus {
@@ -61,7 +61,7 @@ export function syncNow(): Promise<void> {
       const err = w.error || wi.error || m.error || st.error;
       if (err) throw err;
       const remote: Remote = { workouts: w.data ?? [], weigh_ins: wi.data ?? [], measurements: m.data ?? [], settings: st.data ?? null };
-      setState((s) => mergeRemote(s, remote), { remote: true });
+      setState((s) => rematch(mergeRemote(s, remote)), { remote: true });
       const ins = await client.from('insights').select('id,kind,ref,text,created_at').order('created_at', { ascending: false }).limit(200);
       if (!ins.error) actions.setInsights(ins.data ?? []);
 
@@ -184,6 +184,12 @@ export async function coachNote(workoutId: string, force = false): Promise<strin
 }
 export async function weeklyNow(): Promise<string> {
   const { text } = await callGoogle2({ action: 'weekly' });
+  await syncNow();
+  return text;
+}
+/** One-off question about your own training data. The answer is saved with your coach notes. */
+export async function askCoach(question: string): Promise<string> {
+  const { text } = await callGoogle2({ action: 'ask', question });
   await syncNow();
   return text;
 }

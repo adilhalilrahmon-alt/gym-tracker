@@ -1,4 +1,4 @@
-import type { Measurement, State, WeighIn, Workout } from './store';
+import type { Measurement, WeighIn, Workout } from './store';
 import { todayISO } from './store';
 
 export const e1rm = (w: number, r: number) => (r <= 1 ? w : w * (1 + r / 30));
@@ -139,17 +139,36 @@ export function weekCount(workouts: Workout[], week: string): number {
   return days.size;
 }
 
-/** Consecutive weeks hitting the target, counting this week only once it is hit. */
-export function streakWeeks(workouts: Workout[], target: number, today = todayISO()): number {
+/** Sessions a week needs to keep the streak alive: one short of the target is still a good week. */
+export const streakBar = (target: number) => Math.max(1, target - 1);
+
+/**
+ * Consecutive good weeks. A week counts at one session short of the target; frozen weeks
+ * (travel, illness) are skipped without breaking or adding. This week only counts once it's good.
+ */
+export function streakWeeks(workouts: Workout[], target: number, today = todayISO(), frozen: string[] = [], bar = streakBar(target)): number {
+  const first = workouts.length ? weekStart(new Date(workouts[0].startedAt)) : null;
   let wk = weekStart(parseDate(today));
   let n = 0;
-  if (weekCount(workouts, wk) >= target) n++;
+  if (weekCount(workouts, wk) >= bar) n++;
   wk = addDays(wk, -7);
-  while (weekCount(workouts, wk) >= target) {
+  while (first && wk >= first) {
+    if (frozen.includes(wk)) { wk = addDays(wk, -7); continue; }
+    if (weekCount(workouts, wk) < bar) break;
     n++;
     wk = addDays(wk, -7);
   }
   return n;
+}
+
+/** Weeks in the current streak that hit the full target. */
+export function perfectWeeks(workouts: Workout[], target: number, today = todayISO(), frozen: string[] = []): number {
+  return streakWeeks(workouts, target, today, frozen, target);
+}
+
+/** Consecutive weeks with at least one session. */
+export function weeksTrained(workouts: Workout[], today = todayISO(), frozen: string[] = []): number {
+  return streakWeeks(workouts, 1, today, frozen, 1);
 }
 
 export function avgPerWeek(workouts: Workout[], today = todayISO()): number | null {
@@ -239,22 +258,4 @@ export function weeklyRate(weighIns: WeighIn[]): number | null {
 export function navyBodyFat(m: Pick<Measurement, 'waist' | 'neck'>, heightCm: number): number {
   const hIn = heightCm / 2.54;
   return 86.01 * Math.log10(Math.max(1, m.waist - m.neck)) - 70.041 * Math.log10(hIn) + 36.76;
-}
-
-// ---- rule-based coach note (AI version comes in Phase 3) ----
-export function coachNote(s: State, today = todayISO()): string {
-  const { workouts, settings } = s;
-  if (!workouts.length) return 'Tap the gold + when you start your next workout. Type sets the way you would in Notes.';
-  const stalled = allLiftKeys(workouts)
-    .map((l) => liftSummary(workouts, l.key, today))
-    .find((l) => l.stalled);
-  if (stalled) return `${stallSentence(stalled)} ${STALL_ADVICE}`;
-  const left = settings.weeklyTarget - weekCount(workouts, weekStart(parseDate(today)));
-  if (left > 0) return `${left} more session${left > 1 ? 's' : ''} this week to hit your target of ${settings.weeklyTarget}.`;
-  const up = allLiftKeys(workouts)
-    .map((l) => liftSummary(workouts, l.key, today))
-    .filter((l) => (l.change4w ?? 0) > 0)
-    .sort((a, b) => (b.change4w ?? 0) - (a.change4w ?? 0))[0];
-  if (up) return `${up.name} is up ${up.change4w} lb (est. 1RM) over 4 weeks. Weekly target hit, nice work.`;
-  return 'Weekly target hit. Keep the streak going next week.';
 }

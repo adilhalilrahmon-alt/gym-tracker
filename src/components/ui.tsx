@@ -12,6 +12,7 @@ export const Icon = {
   back: <svg aria-hidden="true" width="22" height="22" viewBox="0 0 24 24" {...P} strokeWidth={2.4}><path d="M15 5l-7 7 7 7" /></svg>,
   star: <svg aria-hidden="true" width="28" height="28" viewBox="0 0 24 24" {...P} stroke="#FFB547"><path d="M12 3l1.9 5.8H20l-4.9 3.6 1.9 5.8-5-3.6-5 3.6 1.9-5.8L4 8.8h6.1z" /></svg>,
   pin: (on: boolean) => <svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" {...P} fill={on ? '#FFB547' : 'none'} stroke={on ? '#FFB547' : 'currentColor'}><path d="M12 3l1.9 5.8H20l-4.9 3.6 1.9 5.8-5-3.6-5 3.6 1.9-5.8L4 8.8h6.1z" /></svg>,
+  gear: <svg aria-hidden="true" width="22" height="22" viewBox="0 0 24 24" {...P}><circle cx="12" cy="12" r="3" /><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3h.1a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8v.1a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z" /></svg>,
   dot: <svg aria-hidden="true" width="8" height="8" viewBox="0 0 8 8"><circle cx="4" cy="4" r="4" fill="#FF6B5E" /></svg>,
 };
 
@@ -48,14 +49,27 @@ export interface Series { values: { x: number; y: number }[]; color: string; dot
 /** Day number (days since 1970, as the charts use) → "Nov 11". */
 export const dayLabel = (x: number) => new Date(x * 864e5).toLocaleDateString('en-CA', { month: 'short', day: 'numeric', timeZone: 'UTC' });
 
-/** Small line chart; x values are day numbers, y in lb. Pass xLabel to print dates under the chart. */
-export function LineChart({ series, goal, height = 140, label, xLabel }: { series: Series[]; goal?: number; height?: number; label: string; xLabel?: (x: number) => string }) {
+/** Tiny trend line for list rows. */
+export function Spark({ values, color = '#FFB547' }: { values: number[]; color?: string }) {
+  if (values.length < 2) return <svg width="64" height="24" aria-hidden="true" />;
+  const lo = Math.min(...values), hi = Math.max(...values), span = hi - lo || 1;
+  const pts = values.map((v, i) => `${2 + (i / (values.length - 1)) * 60},${21 - ((v - lo) / span) * 18}`).join(' ');
+  return <svg width="64" height="24" viewBox="0 0 64 24" aria-hidden="true"><polyline fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" points={pts} /></svg>;
+}
+
+/**
+ * Small line chart; x values are day numbers. Pass xLabel to print dates under the chart.
+ * goalEdge: keep the axis fitted to the data and show an off-chart goal as a label at the edge.
+ */
+export function LineChart({ series, goal, goalEdge, goalLabel, height = 140, label, xLabel, yFmt = (v) => String(Math.round(v)), zero }: { series: Series[]; goal?: number; goalEdge?: boolean; goalLabel?: string; height?: number; label: string; xLabel?: (x: number) => string; yFmt?: (v: number) => string; zero?: boolean }) {
   const W = 320, H = height + (xLabel ? 14 : 0), pad = { l: 34, r: 12, t: 10, b: xLabel ? 32 : 18 };
   const all = series.flatMap((s) => s.values);
   if (all.length === 0) return <p className="muted small">No data yet.</p>;
-  const ys = all.map((p) => p.y).concat(goal != null ? [goal] : []);
+  const ys = all.map((p) => p.y).concat(goal != null && !goalEdge ? [goal] : []).concat(zero ? [0] : []);
   let y0 = Math.min(...ys), y1 = Math.max(...ys);
   if (y1 - y0 < 4) { y0 -= 2; y1 += 2; }
+  else if (goalEdge) { const padY = (y1 - y0) * 0.08; y0 -= padY; y1 += padY; }
+  const goalOff = goal != null && goalEdge ? (goal < y0 ? 'below' : goal > y1 ? 'above' : null) : null;
   const x0 = Math.min(...all.map((p) => p.x)), x1 = Math.max(...all.map((p) => p.x), x0 + 1);
   const sx = (x: number) => pad.l + ((x - x0) / (x1 - x0)) * (W - pad.l - pad.r);
   const sy = (y: number) => pad.t + (1 - (y - y0) / (y1 - y0)) * (H - pad.t - pad.b);
@@ -64,13 +78,15 @@ export function LineChart({ series, goal, height = 140, label, xLabel }: { serie
       {[y0, (y0 + y1) / 2, y1].map((v) => (
         <g key={v}>
           <line x1={pad.l} x2={W - pad.r} y1={sy(v)} y2={sy(v)} stroke="#22346E" strokeWidth="1" />
-          <text x={pad.l - 6} y={sy(v) + 4} textAnchor="end" fontSize="10" fill="#A9B3D6">{Math.round(v)}</text>
+          <text x={pad.l - 6} y={sy(v) + 4} textAnchor="end" fontSize="10" fill="#A9B3D6">{yFmt(v)}</text>
         </g>
       ))}
       {xLabel && [...new Set([x0, Math.round((x0 + x1) / 2), x1])].filter((x) => x1 > x0 || x === x0).map((x, i, arr) => (
         <text key={x} x={sx(x)} y={H - 6} textAnchor={arr.length > 1 && i === 0 ? 'start' : i === arr.length - 1 && arr.length > 1 ? 'end' : 'middle'} fontSize="10" fill="#A9B3D6">{xLabel(x)}</text>
       ))}
-      {goal != null && <line x1={pad.l} x2={W - pad.r} y1={sy(goal)} y2={sy(goal)} stroke="#FFB547" strokeWidth="1.5" strokeDasharray="5 5" />}
+      {goal != null && !goalOff && <line x1={pad.l} x2={W - pad.r} y1={sy(goal)} y2={sy(goal)} stroke="#FFB547" strokeWidth="1.5" strokeDasharray="5 5" />}
+      {goalOff && <text x={W - pad.r} y={goalOff === 'below' ? sy(y0) - 5 : sy(y1) + 11} textAnchor="end" fontSize="10" fontWeight="800" fill="#FFB547">{goalLabel ?? `goal ${goal}`} {goalOff === 'below' ? '↓' : '↑'}</text>}
+      {zero && y0 < 0 && y1 > 0 && <line x1={pad.l} x2={W - pad.r} y1={sy(0)} y2={sy(0)} stroke="#A9B3D6" strokeWidth="1" strokeDasharray="2 4" />}
       {series.map((s, i) => (
         <g key={i}>
           {s.values.length > 1 && (

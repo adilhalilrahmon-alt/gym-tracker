@@ -1,15 +1,12 @@
 import { useRef, useState } from 'react';
-import { actions, getState, MEASURE_KEYS, todayISO, useStore, type Measurement, type MeasureKey } from '../lib/store';
+import { actions, MEASURE_KEYS, todayISO, useStore, type Measurement, type MeasureKey } from '../lib/store';
 import { navyBodyFat, parseDate } from '../lib/stats';
 import { SAMPLE } from '../lib/avatar';
 import { FrontAvatar, SideAvatar, setHeightCm } from '../components/Avatar';
-import { Sheet } from '../components/ui';
-import { SyncCard } from '../components/SyncCard';
-import { GoogleCard } from '../components/GoogleCard';
-import { NotifyCard } from '../components/NotifyCard';
+import { Icon, Sheet } from '../components/ui';
+import { Settings } from './Settings';
 import { avatarFromPhoto, useSyncStatus } from '../lib/sync';
-import { maxHrFromAge } from '../lib/zones';
-import { showHeight, showLen, toCm, toInches, type BodyUnit } from '../lib/units';
+import { showLen, toInches, type BodyUnit } from '../lib/units';
 
 /** Inches / cm switch. Changing it here changes it everywhere. */
 function UnitSwitch({ unit, onChange }: { unit: BodyUnit; onChange?: (u: BodyUnit) => void }) {
@@ -66,9 +63,9 @@ function MeasureSheet({ onClose }: { onClose: () => void }) {
 export function Me() {
   const s = useStore((x) => x);
   const [sheet, setSheet] = useState(false);
-  const [ghost, setGhost] = useState(true);
+  const [compare, setCompare] = useState<'none' | 'start' | 'goal'>('start');
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const [idx, setIdx] = useState<number | null>(null);
-  const file = useRef<HTMLInputElement>(null);
   const photo = useRef<HTMLInputElement>(null);
   const [photoBusy, setPhotoBusy] = useState(false);
   const [photoMsg, setPhotoMsg] = useState('');
@@ -86,7 +83,6 @@ export function Me() {
       setPhotoMsg('Avatar updated. The photo was not saved anywhere.');
     } catch (e) { setPhotoMsg((e as Error).message); } finally { setPhotoBusy(false); }
   };
-  const [msg, setMsg] = useState('');
   setHeightCm(s.settings.heightCm);
 
   const ms = s.measurements;
@@ -97,29 +93,27 @@ export function Me() {
   const bf = navyBodyFat(m, s.settings.heightCm);
   const set = s.settings;
   const unit: BodyUnit = set.bodyUnit ?? 'in';
-  // Older saves only kept max HR. If it came from the age formula, show that age back.
-  const guessAge = set.maxHr ? Math.round((208 - set.maxHr) / 0.7) : undefined;
-  const shownAge = set.age ?? (guessAge && maxHrFromAge(guessAge) === set.maxHr ? guessAge : undefined);
-
-  const exportData = () => {
-    const blob = new Blob([JSON.stringify(getState(), null, 2)], { type: 'application/json' });
-    const a = document.createElement('a');
-    a.href = URL.createObjectURL(blob);
-    a.download = `gym-tracker-${todayISO()}.json`;
-    a.click();
-  };
+  // Rough picture of the same body at goal weight: girths shrink with weight, the waist fastest.
+  const curW = s.weighIns[s.weighIns.length - 1]?.weight;
+  const ratio = curW ? set.goalWeight / curW : 1;
+  const goalM = cur && curW && Math.abs(ratio - 1) > 0.01 ? { ...cur, waist: cur.waist * ratio ** 1.1, hips: cur.hips * ratio ** 0.8, chest: cur.chest * ratio ** 0.6, thigh: cur.thigh * ratio ** 0.7, neck: cur.neck * ratio ** 0.4, biceps: cur.biceps * ratio ** 0.4, calf: cur.calf * ratio ** 0.4, shoulders: cur.shoulders * ratio ** 0.3 } : null;
+  const ghostM = compare === 'goal' ? goalM : compare === 'start' && sel > 0 ? startM : null;
+  const dueIn = cur ? 14 - Math.round((+parseDate(todayISO()) - +parseDate(ms[ms.length - 1].date)) / 864e5) : 0;
 
   return (
     <main className="screen">
       <div className="between">
         <h1>You</h1>
-        {!cur && <span className="pill">SAMPLE SHAPE</span>}
+        <div className="row">
+          {!cur && <span className="pill">SAMPLE SHAPE</span>}
+          <button className="icon-btn" aria-label="Settings" onClick={() => setSettingsOpen(true)}>{Icon.gear}</button>
+        </div>
       </div>
 
       <section className="card col" style={{ gap: 8 }}>
         <div className="row" style={{ justifyContent: 'center', alignItems: 'flex-end', gap: 18 }}>
-          <div className="col" style={{ alignItems: 'center' }}><FrontAvatar m={m} bf={bf} ghost={ghost && sel > 0 ? startM : null} height={300} id="me-f" look={set.avatar} /><span className="small muted" style={{ fontWeight: 800 }}>Front</span></div>
-          <div className="col" style={{ alignItems: 'center' }}><SideAvatar m={m} bf={bf} ghost={ghost && sel > 0 ? startM : null} height={300} id="me-s" look={set.avatar} /><span className="small muted" style={{ fontWeight: 800 }}>Side</span></div>
+          <div className="col" style={{ alignItems: 'center' }}><FrontAvatar m={m} bf={bf} ghost={ghostM} height={300} id="me-f" look={set.avatar} /><span className="small muted" style={{ fontWeight: 800 }}>Front</span></div>
+          <div className="col" style={{ alignItems: 'center' }}><SideAvatar m={m} bf={bf} ghost={ghostM} height={300} id="me-s" look={set.avatar} /><span className="small muted" style={{ fontWeight: 800 }}>Side</span></div>
         </div>
         {ms.length > 1 && (
           <div className="field">
@@ -132,7 +126,13 @@ export function Me() {
             <span className="eyebrow">Body fat (tape est.)</span>
             <span className="mid" style={{ color: 'var(--gold)' }}>{bf.toFixed(1)}%</span>
           </div>
-          {ms.length > 1 && <button className="btn ghost" aria-pressed={ghost} onClick={() => setGhost(!ghost)}>{ghost ? 'Hide start' : 'Compare to start'}</button>}
+          {(startM || goalM) && (
+            <div className="seg" role="group" aria-label="Outline to compare with">
+              <button aria-pressed={compare === 'none'} onClick={() => setCompare('none')}>Now</button>
+              {startM && <button aria-pressed={compare === 'start'} onClick={() => setCompare('start')}>vs start</button>}
+              {goalM && <button aria-pressed={compare === 'goal'} onClick={() => setCompare('goal')}>vs goal</button>}
+            </div>
+          )}
         </div>
         {cur && (
           <div className="col" style={{ gap: 6 }}>
@@ -153,6 +153,7 @@ export function Me() {
             </div>
           </div>
         )}
+        {compare === 'goal' && goalM && <span className="tiny muted">The outline is a rough estimate of your shape at {set.goalWeight} lb, scaled from today's measurements. It can't know where you'll lose it from.</span>}
         <button className="btn big-btn" onClick={() => setSheet(true)}>{cur ? 'Log new measurements' : 'Add your measurements'}</button>
         {sync.email && (
           <>
@@ -162,65 +163,11 @@ export function Me() {
             {photoMsg && <span className="small up">{photoMsg}</span>}
           </>
         )}
-        {cur && <span className="tiny muted">Last measured {parseDate(ms[ms.length - 1].date).toLocaleDateString('en-CA', { month: 'short', day: 'numeric' })}. Next one due in 2 weeks.</span>}
+        {cur && <span className="tiny muted">Last measured {parseDate(ms[ms.length - 1].date).toLocaleDateString('en-CA', { month: 'short', day: 'numeric' })}. {dueIn > 0 ? `Next one due in ${dueIn} day${dueIn === 1 ? '' : 's'}.` : 'Time for a new one.'} You get a reminder if measurement notifications are on.</span>}
       </section>
 
-      <section className="card col" style={{ gap: 12 }}>
-        <h2>Settings</h2>
-        <div className="grid2">
-          <div className="field">
-            <label htmlFor="s-goal">Goal weight (lb)</label>
-            <input id="s-goal" className="input" inputMode="decimal" defaultValue={set.goalWeight} onBlur={(e) => { const n = parseFloat(e.target.value); if (n > 60) actions.updateSettings({ goalWeight: n }); }} />
-          </div>
-          <div className="field">
-            <label htmlFor="s-target">Sessions per week</label>
-            <select id="s-target" className="input" value={set.weeklyTarget} onChange={(e) => actions.updateSettings({ weeklyTarget: parseInt(e.target.value, 10) })}>
-              {[2, 3, 4, 5, 6, 7].map((n) => <option key={n} value={n}>{n}</option>)}
-            </select>
-          </div>
-          <div className="field">
-            <label htmlFor="s-height">Height ({unit})</label>
-            <input id="s-height" className="input" inputMode="decimal" key={`h-${unit}`} defaultValue={showHeight(set.heightCm, unit)} onBlur={(e) => { const n = toCm(parseFloat(e.target.value), unit); if (n > 120 && n < 230) actions.updateSettings({ heightCm: Math.round(n * 10) / 10 }); }} />
-          </div>
-          <div className="field">
-            <label htmlFor="s-age">Age</label>
-            <input id="s-age" className="input" inputMode="numeric" key={`age-${shownAge ?? ''}`} defaultValue={shownAge ?? ''} placeholder="e.g. 28" onBlur={(e) => { const a = parseInt(e.target.value, 10); if (a > 12 && a < 90 && a !== shownAge) actions.updateSettings({ age: a, maxHr: maxHrFromAge(a) }); }} />
-          </div>
-          <div className="field">
-            <label htmlFor="s-maxhr">Max heart rate</label>
-            <input id="s-maxhr" className="input" inputMode="numeric" key={set.maxHr ?? 'none'} defaultValue={set.maxHr ?? ''} placeholder="from age" onBlur={(e) => { const n = parseInt(e.target.value, 10); if (n > 120 && n < 230) actions.updateSettings({ maxHr: n }); }} />
-          </div>
-          <div className="field">
-            <label htmlFor="s-rem">Weigh-in reminder</label>
-            <input id="s-rem" className="input" type="time" value={set.reminderTime} onChange={(e) => actions.updateSettings({ reminderTime: e.target.value })} />
-          </div>
-        </div>
-        <div className="between">
-          <span className="small" style={{ fontWeight: 800, color: 'var(--muted)' }}>Body measurements and height in</span>
-          <UnitSwitch unit={unit} />
-        </div>
-        <span className="tiny muted">Age sets your max heart rate (208 − 0.7 × age) for the heart-rate zones. Type a measured max instead if you know it.</span>
-      </section>
-
-      <SyncCard />
-      <GoogleCard />
-      <NotifyCard />
-
-      <section className="card col" style={{ gap: 10 }}>
-        <h2>Your data</h2>
-        <span className="small muted">Stored on this phone, and in the cloud once you sign in above. You can also export a file backup.</span>
-        <div className="row">
-          <button className="btn subtle" onClick={exportData}>Export backup</button>
-          <button className="btn subtle" onClick={() => file.current?.click()}>Import</button>
-          <input ref={file} type="file" accept="application/json" hidden onChange={async (e) => {
-            const f = e.target.files?.[0];
-            if (!f) return;
-            try { actions.importData(await f.text()); setMsg('Backup restored.'); } catch (err) { setMsg((err as Error).message); }
-          }} />
-        </div>
-        {msg && <span className="small up">{msg}</span>}
-      </section>
       {sheet && <MeasureSheet onClose={() => setSheet(false)} />}
+      {settingsOpen && <Settings onClose={() => setSettingsOpen(false)} />}
     </main>
   );
 }

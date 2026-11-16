@@ -38,4 +38,22 @@ Dumbbell raise 30x15, 30x8`);
     expect(w.exercises[0].name).toBe('Overhead Press');
     expect(w.exercises[0].sets[0].weight).toBe(102.5);
   });
+
+  it('reads bodyweight and timed sets', () => {
+    expect(sets('pullup x8, x6')).toEqual(['8 reps', '6 reps']);
+    expect(sets('pull ups 3x8')).toEqual(['8 reps', '8 reps', '8 reps']);
+    expect(sets('plank 60s, 1:30, 2x45s')).toEqual(['60s', '1:30', '45s', '45s']);
+  });
+
+  it('matches spelling variations to one lift and lists lifts typed without sets', () => {
+    const w = parseWorkout('Push day\nbech pres 185x6\nbarbell bench press 185x5\nIncline bench\n');
+    expect(w.exercises.map((e) => e.key)).toEqual(['bench-press', 'bench-press']);
+    expect(w.exercises[0].match?.how).toBe('fuzzy');
+    expect(w.pending.map((e) => e.key)).toEqual(['incline-bench-press']);
+  });
+
+  it('uses remembered names', () => {
+    const w = parseWorkout('dumbbell raise 30x15', { aliases: { 'dumbbell raise': 'lateral-raise' } });
+    expect(w.exercises[0]).toMatchObject({ key: 'lateral-raise', name: 'Lateral Raise', perHand: true });
+  });
 });

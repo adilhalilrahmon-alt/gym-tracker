@@ -150,14 +150,6 @@ async function syncWeights(userId: string, token: string, since: string) {
   const f = (t: string) => `${t}.sample_time.physical_time >= "${since}"`;
   const [w, bf] = await Promise.all([listPoints(token, 'weight', f('weight')), listPoints(token, 'body-fat', f('body_fat')).catch((e) => { diag.bodyFatError = String(e.message); return [] as DP[]; })]);
   diag.weightPoints = w.length; diag.bodyFatPoints = bf.length;
-  diag.weightAll = w.map((p) => ({
-    t: p.weight?.sampleTime?.physicalTime, off: p.weight?.sampleTime?.utcOffset, g: p.weight?.weightGrams,
-    lb: Math.round((Number(p.weight?.weightGrams) / 453.59237) * 10) / 10,
-    src: [p.dataSource?.platform, p.dataSource?.application?.packageName ?? p.dataSource?.application?.name, p.dataSource?.device?.manufacturer].filter(Boolean).join(' / '),
-  }));
-  diag.bodyFatAll = bf.map((p) => ({ t: p.bodyFat?.sampleTime?.physicalTime, pct: p.bodyFat?.percentage, src: p.dataSource?.application?.packageName ?? p.dataSource?.platform }));
-  diag.weightSample = w[0] ? JSON.stringify(w[w.length - 1]).slice(0, 600) : null;
-  diag.bodyFatSample = bf[0] ? JSON.stringify(bf[bf.length - 1]).slice(0, 600) : null;
   // Morning session = readings within 30 min of the day's first one; use the LAST of those
   // (scales often log a few readings while settling or when re-weighing).
   const SESSION = 30 * 60e3;
@@ -239,6 +231,27 @@ async function syncHeartRate(userId: string, token: string) {
   return n;
 }
 
+/** Daily resting heart rate from the Fitbit, kept as one small row the app and the coach can read. */
+async function syncRestingHr(userId: string, token: string) {
+  const since = new Date(Date.now() - 45 * 864e5).toISOString().slice(0, 10);
+  let pts: DP[] = [];
+  try { pts = await listPoints(token, 'daily-resting-heart-rate', `daily_resting_heart_rate.date >= "${since}"`); }
+  catch (e) { diag.restingHrError = String((e as Error).message).slice(0, 200); return 0; }
+  diag.restingHrSample = pts[0] ? JSON.stringify(pts[pts.length - 1]).slice(0, 300) : null;
+  const days = new Map<string, number>();
+  for (const p of pts) {
+    const o = p.dailyRestingHeartRate ?? {};
+    const d = o.date;
+    const date = typeof d === 'string' ? d.slice(0, 10) : d?.year ? `${d.year}-${String(d.month).padStart(2, '0')}-${String(d.day).padStart(2, '0')}` : null;
+    const bpm = firstNumber(o, ['beatsPerMinute', 'bpm', 'restingHeartRate']);
+    if (date && bpm && bpm > 30 && bpm < 120) days.set(date, Math.round(bpm));
+  }
+  if (!days.size) return 0;
+  const restingHr = [...days.entries()].sort((a, b) => a[0].localeCompare(b[0])).slice(-45).map(([date, bpm]) => ({ date, bpm }));
+  await admin.from('insights').upsert({ user_id: userId, id: 'recovery', kind: 'recovery', ref: null, text: JSON.stringify({ restingHr }), created_at: new Date().toISOString() }, { onConflict: 'user_id,id' });
+  return restingHr.length;
+}
+
 async function syncCore(userId: string) {
   const { data: st } = await admin.from('integrations').select('last_sync_at').eq('user_id', userId).eq('provider', 'google').maybeSingle();
   const since = st?.last_sync_at ? new Date(Date.parse(st.last_sync_at) - 3 * 864e5).toISOString() : new Date(Date.now() - 120 * 864e5).toISOString();
@@ -248,6 +261,7 @@ async function syncCore(userId: string) {
     const weighIns = await syncWeights(userId, token, since);
     const workouts = await syncHeartRate(userId, token);
     diag.weighInsWritten = weighIns; diag.workoutsWithHr = workouts;
+    diag.restingHrDays = await syncRestingHr(userId, token);
     await setStatus(userId, { last_sync_at: new Date().toISOString(), last_error: null, debug: diag });
     return { ok: true, weighIns, workouts };
   } catch (e) {
@@ -307,13 +321,20 @@ function zones(series: (number | null)[] | undefined, maxHr: number) {
 
 async function userData(userId: string) {
   const since = new Date(Date.now() - 70 * 864e5).toISOString();
-  const [{ data: ws }, { data: wi }, s] = await Promise.all([
+  const [{ data: ws }, { data: wi }, s, { data: ms }, { data: rec }] = await Promise.all([
     admin.from('workouts').select('id,data').eq('user_id', userId).eq('deleted', false).gte('data->>startedAt', since),
     admin.from('weigh_ins').select('date,weight,body_fat').eq('user_id', userId).eq('deleted', false).gte('date', since.slice(0, 10)).order('date'),
     settingsOf(userId),
+    admin.from('measurements').select('date,data').eq('user_id', userId).eq('deleted', false).order('date'),
+    admin.from('insights').select('text').eq('user_id', userId).eq('id', 'recovery').maybeSingle(),
   ]);
   const workouts = (ws ?? []).map((w: DP) => w.data as DP).sort((a, b) => String(a.startedAt).localeCompare(String(b.startedAt)));
-  return { workouts, weighIns: wi ?? [], settings: s };
+  let restingHr: { date: string; bpm: number }[] = [];
+  try { restingHr = JSON.parse(rec?.text ?? '{}').restingHr ?? []; } catch { /* ignore */ }
+  const m = ms ?? [];
+  // Tape measurements in inches: first and latest, so the coach can see change in body shape.
+  const measurements = m.length ? { latest: { date: m[m.length - 1].date, ...m[m.length - 1].data }, ...(m.length > 1 ? { first: { date: m[0].date, ...m[0].data } } : {}) } : 'none yet';
+  return { workouts, weighIns: wi ?? [], settings: s, measurements, restingHr };
 }
 
 function weekKey(iso: string, tz: string) {
@@ -325,7 +346,8 @@ function weekKey(iso: string, tz: string) {
 const COACH_RULES = `You are a direct, encouraging strength coach texting your athlete after a session.
 Rules: plain text only, no markdown, no lists, no emoji. 3 to 5 short sentences, under 90 words.
 Use the numbers given. Mention one thing that went well, one thing to watch, and ONE concrete target for next time (exercise, weight x reps).
-Estimated 1RM uses Epley. Heart-rate minutes are per zone (% of max HR). Never give medical advice; if something looks like pain or injury, suggest checking with a physio.`;
+Estimated 1RM uses Epley. Heart-rate minutes are per zone (% of max HR). "effort" is how hard the athlete rated the session out of 10, and "note" is in their own words: respond to both when present.
+Resting heart rate that is several beats above its recent average suggests poor recovery; mention it only then. Never give medical advice; if something looks like pain or injury, suggest checking with a physio.`;
 
 async function workoutNote(userId: string, workoutId: string, force = false): Promise<string | null> {
   const id = `w-${workoutId}`;
@@ -333,7 +355,7 @@ async function workoutNote(userId: string, workoutId: string, force = false): Pr
     const { data: ex } = await admin.from('insights').select('text').eq('user_id', userId).eq('id', id).maybeSingle();
     if (ex) return ex.text;
   }
-  const { workouts, weighIns, settings } = await userData(userId);
+  const { workouts, weighIns, settings, restingHr } = await userData(userId);
   const w = workouts.find((x) => x.id === workoutId);
   if (!w) return null;
   const tz = settings.tz ?? 'America/Toronto';
@@ -346,7 +368,8 @@ async function workoutNote(userId: string, workoutId: string, force = false): Pr
   const sessionsThisWeek = new Set(workouts.filter((x) => weekKey(x.startedAt, tz) === wk).map((x) => String(x.startedAt).slice(0, 10))).size;
   const maxHr = settings.maxHr ?? 190;
   const data = {
-    workout: { label: w.label, date: String(w.startedAt).slice(0, 10), minutes: Math.round((Date.parse(w.endedAt) - Date.parse(w.startedAt)) / 60e3), exercises },
+    workout: { label: w.label, date: String(w.startedAt).slice(0, 10), minutes: Math.round((Date.parse(w.endedAt) - Date.parse(w.startedAt)) / 60e3), exercises, ...(w.rpe ? { effort: w.rpe } : {}), ...(w.note ? { note: String(w.note).slice(0, 300) } : {}) },
+    restingHeartRate: restingHr.length ? restingHr.slice(-10).map((x) => `${x.date}: ${x.bpm}`) : 'not available',
     heartRate: w.hr ? { avg: w.hr.avg, max: w.hr.max, maxHrSetting: maxHr, minutesInZones_50_60_70_80_90pct: zones(w.hr.series, maxHr) } : 'not available',
     week: { sessions: sessionsThisWeek, target: settings.weeklyTarget ?? 4 },
     bodyweight: { goalLb: settings.goalWeight ?? 160, last14Days: weighIns.slice(-14).map((x: DP) => `${x.date}: ${x.weight}`) },
@@ -361,11 +384,12 @@ Plain text, no markdown or emoji, under 150 words, in this order on separate lin
 1) One-line verdict on the week (sessions vs target, consistency).
 2) Bodyweight trend toward the goal, in lb per week, and whether that pace is sensible (0.5 to 1% of bodyweight per week is a healthy cut).
 3) Lifts: name the best progress, and any lift that has stalled (no estimated-1RM gain in 3+ sessions) with one specific fix (deload 10%, change rep range, add a set, or swap variation).
-4) One focus for next week.
+4) One focus for next week. If last week's review set a focus, say in a few words whether it was met.
+Body measurements (inches) and resting heart rate are included when available: mention a waist change or a clear resting-heart-rate rise if there is one, otherwise leave them out.
 Use only the numbers given; say so if data is thin. No medical advice.`;
 
 async function weeklyReview(userId: string, force = false): Promise<string | null> {
-  const { workouts, weighIns, settings } = await userData(userId);
+  const { workouts, weighIns, settings, measurements, restingHr } = await userData(userId);
   const tz = settings.tz ?? 'America/Toronto';
   const wk = weekKey(new Date().toISOString(), tz);
   const id = `wk-${wk}`;
@@ -373,6 +397,7 @@ async function weeklyReview(userId: string, force = false): Promise<string | nul
     const { data: ex } = await admin.from('insights').select('text').eq('user_id', userId).eq('id', id).maybeSingle();
     if (ex) return ex.text;
   }
+  const { data: prev } = await admin.from('insights').select('text').eq('user_id', userId).eq('kind', 'weekly').neq('id', id).order('created_at', { ascending: false }).limit(1).maybeSingle();
   const weeks: Record<string, number> = {};
   for (const w of workouts) weeks[weekKey(w.startedAt, tz)] = (weeks[weekKey(w.startedAt, tz)] ?? 0) + 1;
   const lifts: Record<string, { date: string; e1rm: number; top: string }[]> = {};
@@ -385,10 +410,44 @@ async function weeklyReview(userId: string, force = false): Promise<string | nul
     sessionsPerWeek: weeks,
     target: settings.weeklyTarget ?? 4,
     lifts: Object.fromEntries(Object.entries(lifts).map(([k, v]) => [k, v.slice(-6)])),
+    measurements,
+    restingHeartRate: restingHr.length ? restingHr.slice(-14).map((x) => `${x.date}: ${x.bpm}`) : 'not available',
+    sessionNotes: workouts.filter((w) => weekKey(w.startedAt, tz) === wk && (w.note || w.rpe)).map((w) => ({ date: String(w.startedAt).slice(0, 10), label: w.label, effort: w.rpe, note: w.note })),
+    lastWeekReview: prev?.text ?? 'none',
     bodyweight: { goalLb: settings.goalWeight ?? 160, readings: weighIns.slice(-28).map((x: DP) => `${x.date}: ${x.weight}${x.body_fat ? ` (${x.body_fat}% fat)` : ''}`) },
   };
   const text = await claude(WEEKLY_RULES, [{ type: 'text', text: JSON.stringify(data) }], 500);
   await admin.from('insights').upsert({ user_id: userId, id, kind: 'weekly', ref: wk, text }, { onConflict: 'user_id,id' });
+  return text;
+}
+
+const ASK_RULES = `You are a direct, encouraging strength coach answering one question from your athlete about their own training log.
+Plain text, no markdown, no lists, no emoji, under 120 words. Answer from the data given and quote the numbers you rely on; if the data can't answer it, say what's missing.
+You may suggest what to try next for a lift they already do (weight x reps), but do not write programs or pick new exercises. No medical advice; for pain or injury suggest a physio.`;
+
+async function askCoach(userId: string, question: string): Promise<string> {
+  const q = question.trim().slice(0, 300);
+  if (q.length < 4) throw new Error('Ask a longer question.');
+  const day = new Date().toISOString().slice(0, 10);
+  const { count } = await admin.from('insights').select('id', { count: 'exact', head: true }).eq('user_id', userId).eq('kind', 'ask').gte('created_at', `${day}T00:00:00Z`);
+  if ((count ?? 0) >= 10) throw new Error('That is 10 questions today. Ask again tomorrow.');
+  const { workouts, weighIns, settings, measurements, restingHr } = await userData(userId);
+  const lifts: Record<string, { date: string; e1rm: number; top: string }[]> = {};
+  for (const w of workouts) for (const ex of w.exercises ?? []) {
+    const b = bestSet(ex);
+    if (b.e1rm) (lifts[ex.name] ??= []).push({ date: String(w.startedAt).slice(0, 10), ...b });
+  }
+  const data = {
+    today: day,
+    target: settings.weeklyTarget ?? 4,
+    workouts: workouts.slice(-24).map((w) => ({ date: String(w.startedAt).slice(0, 10), label: w.label, minutes: Math.round((Date.parse(w.endedAt) - Date.parse(w.startedAt)) / 60e3), avgHr: w.hr?.avg, effort: w.rpe, note: w.note, lifts: (w.exercises ?? []).map((e: DP) => `${e.name}: ${(e.sets ?? []).map((x: DP) => (x.weight == null ? `${x.reps}` : `${x.weight}x${x.reps}`)).join(', ')}`) })),
+    liftTrends: Object.fromEntries(Object.entries(lifts).map(([k, v]) => [k, v.slice(-8)])),
+    bodyweight: { goalLb: settings.goalWeight ?? 160, readings: weighIns.slice(-28).map((x: DP) => `${x.date}: ${x.weight}`) },
+    measurements,
+    restingHeartRate: restingHr.slice(-14).map((x) => `${x.date}: ${x.bpm}`),
+  };
+  const text = await claude(ASK_RULES, [{ type: 'text', text: `Question: ${q}\n\nData: ${JSON.stringify(data)}` }], 400);
+  await admin.from('insights').upsert({ user_id: userId, id: `ask-${Date.now()}`, kind: 'ask', ref: q, text }, { onConflict: 'user_id,id' });
   return text;
 }
 
@@ -549,6 +608,8 @@ Deno.serve(async (req) => {
       try { return json({ text: await workoutNote(userId, String(body.workoutId), !!body.force) }); } catch (e) { return aiError(e); }
     case 'weekly':
       try { return json({ text: await weeklyReview(userId, true) }); } catch (e) { return aiError(e); }
+    case 'ask':
+      try { return json({ text: await askCoach(userId, String(body.question ?? '')) }); } catch (e) { return aiError(e); }
     case 'avatar':
       try { return json({ features: await avatarFromPhoto(String(body.image ?? '')) }); } catch (e) { return aiError(e); }
     case 'vapid': return json({ publicKey: await vapid() });

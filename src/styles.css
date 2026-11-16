@@ -80,7 +80,7 @@ textarea.input { height: auto; padding: 10px 12px; line-height: 1.45; resize: no
 .fab { position: absolute; right: 20px; bottom: calc(var(--nav-h) + var(--nav-pad) + 18px); width: 64px; height: 64px; border-radius: 50%; border: none; background: var(--gold); display: grid; place-items: center; box-shadow: 0 0 0 6px rgba(255, 181, 71, .18), 0 10px 24px rgba(0, 0, 0, .45); z-index: 6; }
 .fab.live { background: var(--coral); box-shadow: 0 0 0 6px rgba(255, 107, 94, .2), 0 10px 24px rgba(0, 0, 0, .45); }
 
-.overlay { position: absolute; inset: 0; background: var(--bg); z-index: 10; display: flex; flex-direction: column; }
+.overlay { position: fixed; top: 0; left: 0; right: 0; height: var(--app-h, 100%); background: var(--bg); z-index: 10; display: flex; flex-direction: column; }
 .overlay .screen { padding-bottom: calc(var(--safe-b) + 24px); }
 .sheet-bg { position: fixed; inset: 0; background: rgba(5, 10, 25, .6); z-index: 20; display: flex; align-items: flex-end; }
 .sheet { background: var(--card); width: 100%; border-radius: 24px 24px 0 0; padding: 18px 18px calc(18px + var(--safe-b)); display: flex; flex-direction: column; gap: 12px; }
@@ -100,3 +100,6 @@ details summary::-webkit-details-marker { display: none; }
 .seg { display: inline-flex; background: var(--bg); border: 1px solid #2c3f7c; border-radius: 12px; padding: 3px; gap: 2px; }
 .seg button { border: none; background: transparent; color: var(--muted); font-weight: 800; border-radius: 9px; padding: 0 14px; height: 34px; }
 .seg button[aria-pressed='true'] { background: var(--gold); color: var(--bg); }
+
+/* Screens are scrolling flex columns: keep controls at their own height. */
+.screen > *, .sheet > * { flex-shrink: 0; }

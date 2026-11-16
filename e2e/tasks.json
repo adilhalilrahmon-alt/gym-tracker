@@ -4,7 +4,7 @@
     "seed": "three-weeks",
     "persona": "Adil mid-workout at the gym: sweaty, one hand on the phone, types fast in shorthand and makes typos (commas instead of x, missing spaces). Impatient between sets.",
     "goal": "Start a workout and log this leg session the way you'd actually type it between sets: squat 230x5, 185x6, 185,5 / hack squat 200x6 / leg ext 100x10, 200x10 / calf raise 90x15. Fix anything the app flags, then finish the workout.",
-    "success": "A workout with these 4 exercises is saved and shows in Progress → Workouts."
+    "success": "A workout with these 4 exercises is saved and shows in Progress \u2192 Workouts."
   },
   {
     "id": "is-bench-stalling",
@@ -19,5 +19,19 @@
     "persona": "Someone opening the app for the very first time. Has never seen it, doesn't know where anything is, reads labels literally.",
     "goal": "Set your goal weight to 158 lb, enter your body measurements (neck 15.5, shoulders 47, chest 40, biceps 14, waist 34, hips 39, thigh 23, calf 15) and check what the avatar looks like.",
     "success": "Goal weight is 158, measurements are saved, and you saw the avatar update."
+  },
+  {
+    "id": "messy-lift-names",
+    "seed": "three-weeks",
+    "persona": "Adil between sets, typing fast with typos and different names for the same lift each time.",
+    "goal": "Start a workout and log: bech pres 185x6, 185x6 / barbell bench press 185x5 / lat raises 20x15 / dumbell raise 20x12 / tricep pushdowns 60x12. Deal with anything the app asks, finish, then check in Progress that the bench sets all landed under one Bench Press lift and see which muscle groups the lifts are filed under.",
+    "success": "Workout saved; bench entries are under one Bench Press lift; lifts appear under muscle-group headings."
+  },
+  {
+    "id": "what-to-lift-today",
+    "seed": "three-weeks",
+    "persona": "Adil walking into the gym for leg day, wants to know what he did last time and what to aim for today without digging.",
+    "goal": "Start today's leg day from your previous leg day. Find out what you lifted last time on squat and what the app suggests trying today, use the suggestion, add one more exercise of your choice, and finish.",
+    "success": "You saw last time's squat sets and a suggested target, and saved a leg workout."
   }
 ]
