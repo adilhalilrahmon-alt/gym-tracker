@@ -259,3 +259,28 @@ export function navyBodyFat(m: Pick<Measurement, 'waist' | 'neck'>, heightCm: nu
   const hIn = heightCm / 2.54;
   return 86.01 * Math.log10(Math.max(1, m.waist - m.neck)) - 70.041 * Math.log10(hIn) + 36.76;
 }
+
+export interface BodyFatReading {
+  value: number;
+  source: 'scale' | 'tape';
+  /** Scale readings averaged (0 for tape). */
+  n: number;
+  /** Tape estimate for the same day, when measurements exist. */
+  tape: number | null;
+}
+
+/**
+ * Body fat as of a date. Uses the Renpho scale: the average of its readings in the 7 days up to
+ * that date (one reading swings with hydration). Falls back to the tape (Navy) estimate when the
+ * scale has nothing from the last 14 days.
+ */
+export function bodyFatOn(weighIns: WeighIn[], m: Pick<Measurement, 'waist' | 'neck'> | null, heightCm: number, date: string): BodyFatReading | null {
+  const tape = m ? navyBodyFat(m, heightCm) : null;
+  const withBf = weighIns.filter((w) => w.bodyFat != null && w.bodyFat > 2 && w.bodyFat < 60 && w.date <= date);
+  const latest = withBf[withBf.length - 1];
+  if (latest && latest.date >= addDays(date, -14)) {
+    const win = withBf.filter((w) => w.date > addDays(latest.date, -7));
+    return { value: win.reduce((a, w) => a + w.bodyFat!, 0) / win.length, source: 'scale', n: win.length, tape };
+  }
+  return tape == null ? null : { value: tape, source: 'tape', n: 0, tape };
+}

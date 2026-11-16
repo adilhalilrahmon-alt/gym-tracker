@@ -1,5 +1,5 @@
 import { useStore, todayISO } from '../lib/store';
-import { durationMin, navyBodyFat, parseDate, setCount, sevenDayAvg, weekCount, weekStart, addDays, dayNumber, workoutDay } from '../lib/stats';
+import { bodyFatOn, durationMin, parseDate, setCount, sevenDayAvg, weekCount, weekStart, addDays, dayNumber, workoutDay } from '../lib/stats';
 import { goalPace, homeNote, liftInsight, weekPace, workoutPRs } from '../lib/insights';
 import { showW } from '../lib/units';
 import { FrontAvatar } from '../components/Avatar';
@@ -27,7 +27,7 @@ export function Home({ onWeight, onGo, onLift }: { onWeight: () => void; onGo: (
   const pace = goalPace(s.weighIns, goal, today);
   const meas = s.measurements[s.measurements.length - 1];
   const m = meas ?? SAMPLE;
-  const bf = navyBodyFat(m, s.settings.heightCm);
+  const bf = bodyFatOn(s.weighIns, meas ?? null, s.settings.heightCm, today)?.value ?? 18;
   const thisWeek = weekCount(s.workouts, weekStart(new Date()));
   const lastW = s.workouts[s.workouts.length - 1];
   const wp = weekPace(thisWeek, s.settings.weeklyTarget, !!lastW && workoutDay(lastW) === today, today);

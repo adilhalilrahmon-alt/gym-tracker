@@ -1,4 +1,4 @@
-import { e1rm, streakWeeks, weekStart, liftSummary, heatmap, monthGrid, navyBodyFat, sevenDayAvg, stallSentence, dayNumber } from './stats';
+import { e1rm, streakWeeks, weekStart, liftSummary, heatmap, monthGrid, navyBodyFat, sevenDayAvg, stallSentence, dayNumber, bodyFatOn } from './stats';
 import { parseWorkout } from './parser';
 import type { Workout } from './store';
 
@@ -63,5 +63,17 @@ describe('stats', () => {
       { date: '2026-11-11', weight: 171.2, source: 'manual' },
     ]);
     expect(a[1].avg).toBeCloseTo(171.6);
+  });
+
+  it('uses the 7-day scale average for body fat, tape when the scale is stale', () => {
+    const m = { waist: 33.5, neck: 14.6 };
+    const w = (date: string, bodyFat?: number) => ({ date, weight: 171, bodyFat, source: 'scale' as const });
+    const ins = [w('2026-11-01', 25), w('2026-11-10', 22), w('2026-11-12', 21), w('2026-11-15', 23), w('2026-11-16')];
+    const r = bodyFatOn(ins, m, 185, '2026-11-16')!;
+    expect(r.source).toBe('scale');
+    expect(r.value).toBeCloseTo(22, 5);
+    expect(r.tape).toBeCloseTo(16.1, 1);
+    expect(bodyFatOn([w('2026-10-01', 22)], m, 185, '2026-11-16')!.source).toBe('tape');
+    expect(bodyFatOn([], null, 185, '2026-11-16')).toBeNull();
   });
 });

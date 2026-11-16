@@ -1,6 +1,6 @@
 import { useRef, useState } from 'react';
 import { actions, MEASURE_KEYS, todayISO, useStore, type Measurement, type MeasureKey } from '../lib/store';
-import { navyBodyFat, parseDate } from '../lib/stats';
+import { bodyFatOn, parseDate } from '../lib/stats';
 import { SAMPLE } from '../lib/avatar';
 import { FrontAvatar, SideAvatar, setHeightCm } from '../components/Avatar';
 import { Icon, Sheet } from '../components/ui';
@@ -90,7 +90,9 @@ export function Me() {
   const cur = ms[sel] ?? null;
   const m = cur ?? SAMPLE;
   const startM = ms.length > 1 ? ms[0] : null;
-  const bf = navyBodyFat(m, s.settings.heightCm);
+  // Scale reading for the day being shown (latest, or the selected measurement's date).
+  const bfr = bodyFatOn(s.weighIns, cur, s.settings.heightCm, cur && sel < ms.length - 1 ? cur.date : todayISO());
+  const bf = bfr?.value ?? 18;
   const set = s.settings;
   const unit: BodyUnit = set.bodyUnit ?? 'in';
   // Rough picture of the same body at goal weight: girths shrink with weight, the waist fastest.
@@ -123,8 +125,10 @@ export function Me() {
         )}
         <div className="between">
           <div className="col" style={{ gap: 0 }}>
-            <span className="eyebrow">Body fat (tape est.)</span>
-            <span className="mid" style={{ color: 'var(--gold)' }}>{bf.toFixed(1)}%</span>
+            <span className="eyebrow">Body fat {bfr?.source === 'scale' ? '(Renpho, 7-day avg)' : bfr ? '(tape est.)' : ''}</span>
+            <span className="mid" style={{ color: 'var(--gold)' }}>{bfr ? `${bf.toFixed(1)}%` : '—'}</span>
+            {bfr?.source === 'scale' && bfr.tape != null && <span className="tiny muted">Tape estimate {bfr.tape.toFixed(1)}%</span>}
+            {bfr?.source === 'tape' && <span className="tiny muted">Step on the Renpho to use its reading</span>}
           </div>
           {(startM || goalM) && (
             <div className="seg" role="group" aria-label="Outline to compare with">
