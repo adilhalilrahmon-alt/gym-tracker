@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { actions, getState, todayISO, useStore } from '../lib/store';
-import { addJumpFlags, formatSet, parseWorkout, type ParsedExercise } from '../lib/parser';
+import { addJumpFlags, formatSet, mergeSameLift, parseWorkout, type ParsedExercise } from '../lib/parser';
 import { lastSessionTop, parseDate } from '../lib/stats';
 import { goalPace, liftSessions, setsLabel, setsText, suggestNext, workoutPRs, type PR } from '../lib/insights';
 import { GROUPS, liftInfo } from '../lib/lifts';
@@ -72,17 +72,13 @@ export function Logger({ onClose }: { onClose: () => void }) {
   const hold = useMemo(() => !!goalPace(weighIns, settings.goalWeight)?.tooFast, [weighIns, settings.goalWeight]);
   const advice = (key: string) => suggestNext(workouts, key, settings.customLifts, { hold });
 
-  const final = parsed.exercises.map((ex, ei) => {
-    const { match: _m, ...rest } = ex;
-    return {
-      ...rest,
-      sets: ex.sets.map((s, i) => {
-        const f = ex.flags.find((fl) => fl.kind === 'jump' && fl.setIndex === i);
-        return f && fixes[`${ei}:${i}`] === 'fix' ? { ...s, weight: f.suggestion ?? s.weight } : s;
-      }),
-      flags: [],
-    };
-  });
+  const final = mergeSameLift(parsed.exercises.map((ex, ei) => ({
+    ...ex,
+    sets: ex.sets.map((s, i) => {
+      const f = ex.flags.find((fl) => fl.kind === 'jump' && fl.setIndex === i);
+      return f && fixes[`${ei}:${i}`] === 'fix' ? { ...s, weight: f.suggestion ?? s.weight } : s;
+    }),
+  })));
   const open = parsed.exercises.flatMap((ex, ei) => ex.flags.filter((f) => f.kind === 'jump' && !fixes[`${ei}:${f.setIndex}`]).map((f) => `${ei}:${f.setIndex}`));
   const unresolved = open.length > 0;
   const totalSets = final.reduce((n, e) => n + e.sets.length, 0);
@@ -280,7 +276,7 @@ export function Logger({ onClose }: { onClose: () => void }) {
             const id = actions.finishWorkout(parsed.label, final);
             const all = getState().workouts;
             const mine = all.find((w) => w.id === id);
-            setSaved({ line: `${final.length} exercise${final.length > 1 ? 's' : ''}, ${totalSets} sets.`, prs: mine ? workoutPRs(all, mine, settings.customLifts) : [] });
+            setSaved({ line: `${final.length} exercise${final.length > 1 ? 's' : ''}, ${totalSets} set${totalSets === 1 ? '' : 's'}.`, prs: mine ? workoutPRs(all, mine, settings.customLifts) : [] });
           }}
         >
           {unresolved ? `Check the flagged set${open.length > 1 ? 's' : ''}` : isPast ? 'Save workout' : 'Finish workout'}

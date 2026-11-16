@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { actions, todayISO, useStore, type Workout } from '../lib/store';
-import { formatSet, parseWorkout } from '../lib/parser';
+import { formatSet, mergeSameLift, parseWorkout } from '../lib/parser';
 import { durationMin } from '../lib/stats';
 import { setsText } from '../lib/insights';
 import { Sheet } from './ui';
@@ -41,7 +41,7 @@ export function EditWorkoutSheet({ w, onClose }: { w: Workout; onClose: () => vo
       <input className="input" aria-label="Workout note" placeholder="Note (optional)" value={note} onChange={(e) => setNote(e.target.value)} />
       <button className="btn big-btn" disabled={!ok} onClick={() => {
         const moved = +when !== +start || m !== durationMin(w);
-        actions.editWorkout(w.id, text, parsed.label ?? w.label, parsed.exercises.map(({ match: _m, ...e }) => ({ ...e, flags: [] })), {
+        actions.editWorkout(w.id, text, parsed.label ?? w.label, mergeSameLift(parsed.exercises), {
           note: note.trim() || undefined,
           ...(moved ? { startedAt: when.toISOString(), endedAt: new Date(+when + m * 60000).toISOString() } : {}),
         });

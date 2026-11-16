@@ -56,7 +56,7 @@ export function App() {
       {/* Settings don't need the log button, and it covered text there. */}
       {(tab !== 'me' || active) && <button className={`fab ${active ? 'live' : ''}`} aria-label={active ? 'Resume workout' : 'Log a workout'} onClick={() => setLogging(true)}>{Icon.plus}</button>}
 
-      <nav className="nav" aria-label="Main">
+      <nav className="nav" aria-label="Main" {...(lift || logging ? { inert: '' as unknown as boolean } : {})}>
         {TABS.map((t) => (
           <button key={t.id} aria-current={tab === t.id ? 'page' : undefined} onClick={() => setTab(t.id)}>{t.icon}{t.label}</button>
         ))}

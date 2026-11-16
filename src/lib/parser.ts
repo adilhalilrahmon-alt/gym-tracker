@@ -179,3 +179,14 @@ export function formatSet(s: ParsedSet): string {
   if (s.weight == null) return `${s.reps} reps`;
   return `${s.addedWeight ? '+' : ''}${s.weight}×${s.reps}`;
 }
+
+/** Fold repeat entries of the same lift ("bench…" on two lines) into one, keeping order. Drops logging-only fields. */
+export function mergeSameLift(exercises: ParsedExercise[]): ParsedExercise[] {
+  const out: ParsedExercise[] = [];
+  for (const { match: _m, ...ex } of exercises) {
+    const prev = out.find((o) => o.key === ex.key);
+    if (prev) { prev.sets = [...prev.sets, ...ex.sets]; prev.perHand = prev.perHand || ex.perHand; prev.bodyweight = prev.bodyweight && ex.bodyweight; }
+    else out.push({ ...ex, sets: [...ex.sets], flags: [] });
+  }
+  return out;
+}

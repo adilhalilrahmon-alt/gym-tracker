@@ -129,7 +129,7 @@ export function Progress({ onWeight, onLift }: { onWeight: () => void; onLift: (
         <section key={g.group} className="card col" style={{ gap: 2 }}>
           <div className="between" style={{ paddingBottom: 4 }}>
             <strong style={{ fontFamily: 'Fredoka, sans-serif', fontSize: 17 }}>{g.label}</strong>
-            <span className="small muted"><strong style={{ color: 'var(--text)' }}>{g.sets}</strong> sets this week{g.usual >= 0.5 ? ` · usually ${Math.round(g.usual)}` : ''}</span>
+            <span className="small muted"><strong style={{ color: 'var(--text)' }}>{g.sets}</strong> set{g.sets === 1 ? '' : 's'} this week{g.usual >= 0.5 ? ` · usually ${Math.round(g.usual)}` : ''}</span>
           </div>
           {g.group === 'other' && <span className="tiny muted" style={{ paddingBottom: 4 }}>Lifts I couldn't place. Open one to set its muscle group or merge it into another lift.</span>}
           {g.lifts.map((k) => {
@@ -163,7 +163,7 @@ export function Progress({ onWeight, onLift }: { onWeight: () => void; onLift: (
               <summary className="between">
                 <span className="col" style={{ gap: 0 }}>
                   <strong>{w.label ?? 'Workout'}{prs.length ? <span className="warn"> ★ {prs.length} PR{prs.length > 1 ? 's' : ''}</span> : null}</strong>
-                  <span className="small muted">{new Date(w.startedAt).toLocaleDateString('en-CA', { weekday: 'short', month: 'short', day: 'numeric' })} · {durationMin(w)} min · {setCount(w)} sets{w.hr ? ` · HR ${w.hr.avg} avg, ${w.hr.max} max` : ''}{w.rpe ? ` · effort ${w.rpe}` : ''}</span>
+                  <span className="small muted">{new Date(w.startedAt).toLocaleDateString('en-CA', { weekday: 'short', month: 'short', day: 'numeric' })} · {durationMin(w)} min · {setCount(w)} set{setCount(w) === 1 ? '' : 's'}{w.hr ? ` · HR ${w.hr.avg} avg, ${w.hr.max} max` : ''}{w.rpe ? ` · effort ${w.rpe}` : ''}</span>
                 </span>
                 <span className="muted small">Details</span>
               </summary>
