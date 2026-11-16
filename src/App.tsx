@@ -21,6 +21,24 @@ const TABS: { id: Tab; label: string; icon: JSX.Element }[] = [
 
 export function App() {
   const [tab, setTab] = useState<Tab>('home');
+  // The tab bar hides while scrolling down and comes back on any scroll up (like YouTube).
+  const [navHidden, setNavHidden] = useState(false);
+  useEffect(() => {
+    const last = new WeakMap<EventTarget, number>();
+    const onScroll = (e: Event) => {
+      const el = e.target as HTMLElement;
+      if (!(el instanceof HTMLElement) || !el.classList.contains('screen') || el.closest('.overlay')) return;
+      const y = el.scrollTop, prev = last.get(el) ?? 0;
+      last.set(el, y);
+      const atBottom = el.scrollHeight - el.clientHeight - y < 4;
+      if (y < 40) setNavHidden(false);
+      else if (y - prev > 6 && !atBottom) setNavHidden(true);
+      else if (prev - y > 6) setNavHidden(false);
+    };
+    document.addEventListener('scroll', onScroll, true);
+    return () => document.removeEventListener('scroll', onScroll, true);
+  }, []);
+  useEffect(() => setNavHidden(false), [tab]);
   const [logging, setLogging] = useState(false);
   const [weight, setWeight] = useState(false);
   const [lift, setLift] = useState<string | null>(null);
@@ -54,9 +72,9 @@ export function App() {
       {tab === 'me' && <Me />}
 
       {/* Settings don't need the log button, and it covered text there. */}
-      {(tab !== 'me' || active) && <button className={`fab ${active ? 'live' : ''}`} aria-label={active ? 'Resume workout' : 'Log a workout'} onClick={() => setLogging(true)}>{Icon.plus}</button>}
+      {(tab !== 'me' || active) && <button className={`fab ${active ? 'live' : ''} ${navHidden ? 'low' : ''}`} aria-label={active ? 'Resume workout' : 'Log a workout'} onClick={() => setLogging(true)}>{Icon.plus}</button>}
 
-      <nav className="nav" aria-label="Main" {...(lift || logging ? { inert: '' as unknown as boolean } : {})}>
+      <nav className={`nav ${navHidden ? 'hidden' : ''}`} aria-label="Main" {...(lift || logging ? { inert: '' as unknown as boolean } : {})}>
         {TABS.map((t) => (
           <button key={t.id} aria-current={tab === t.id ? 'page' : undefined} onClick={() => setTab(t.id)}>{t.icon}{t.label}</button>
         ))}
