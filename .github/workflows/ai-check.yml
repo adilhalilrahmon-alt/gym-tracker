@@ -1,0 +1,15 @@
+name: AI check (temporary)
+on: workflow_dispatch
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Call the coach model the way the server does
+        env:
+          KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: |
+          for MT in 500 4000; do
+            curl -s https://api.anthropic.com/v1/messages -H "x-api-key: $KEY" -H 'anthropic-version: 2023-06-01' -H 'content-type: application/json' \
+              -d "{\"model\":\"claude-sonnet-5-5\",\"max_tokens\":$MT,\"system\":\"You are a strength coach. Write a 4-part weekly review in under 150 words, plain text.\",\"messages\":[{\"role\":\"user\",\"content\":\"{\\\"weekStarting\\\":\\\"2026-11-16\\\",\\\"sessionsPerWeek\\\":{\\\"2026-11-09\\\":2},\\\"target\\\":4,\\\"lifts\\\":{\\\"Bench Press\\\":[{\\\"date\\\":\\\"2026-11-12\\\",\\\"e1rm\\\":222,\\\"top\\\":\\\"185x6\\\"}]},\\\"bodyweight\\\":{\\\"goalLb\\\":160,\\\"readings\\\":[\\\"2026-11-16: 171.2\\\"]}}\"}]}" \
+              | python3 -c "import json,sys; b=json.load(sys.stdin); print('max_tokens=$MT', 'stop:', b.get('stop_reason'), 'blocks:', [c.get('type') for c in b.get('content',[])], 'usage:', b.get('usage',{}).get('output_tokens'), 'error:', b.get('error')); print('TEXT:', ''.join(c.get('text','') for c in b.get('content',[]) if c.get('type')=='text')[:300])"
+          done
