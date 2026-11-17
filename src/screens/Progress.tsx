@@ -23,7 +23,8 @@ export function Progress({ onWeight, onLift }: { onWeight: () => void; onLift: (
   const [del, setDel] = useState<string | null>(null);
   const [editing, setEditing] = useState<Workout | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
-  const [err, setErr] = useState('');
+  // Errors and "done" messages are shown next to the button that was pressed.
+  const [msg, setMsg] = useState<{ key: string; text: string; bad: boolean } | null>(null);
   const [q, setQ] = useState('');
   const [shown, setShown] = useState(8);
   const [question, setQuestion] = useState('');
@@ -33,8 +34,10 @@ export function Progress({ onWeight, onLift }: { onWeight: () => void; onLift: (
   const noteFor = (id: string) => s.insights.find((i) => i.id === `w-${id}`);
   const maxHr = s.settings.maxHr ?? 190;
   const ask = async (key: string, fn: () => Promise<unknown>) => {
-    setBusy(key); setErr('');
-    try { await fn(); } catch (e) { setErr((e as Error).message); } finally { setBusy(null); }
+    setBusy(key); setMsg(null);
+    try { await fn(); setMsg({ key, text: 'Updated just now.', bad: false }); setTimeout(() => setMsg((m) => (m?.key === key && !m.bad ? null : m)), 4000); }
+    catch (e) { setMsg({ key, text: (e as Error).message || 'Something went wrong. Try again.', bad: true }); }
+    finally { setBusy(null); }
   };
   const recentW = s.weighIns.filter((w) => w.date >= addDays(today, -90));
   const avg = sevenDayAvg(s.weighIns).filter((p) => p.date >= addDays(today, -90));
@@ -85,7 +88,7 @@ export function Progress({ onWeight, onLift }: { onWeight: () => void; onLift: (
             ))}
           </form>
         )}
-        {err && <span className="small warn">{err}</span>}
+        {msg && (msg.key === 'weekly' || msg.key === 'ask') && <span className={`small ${msg.bad ? 'warn' : 'up'}`} role="status">{msg.text}</span>}
       </section>
 
       <section className="card col" style={{ gap: 8 }}>
@@ -174,6 +177,7 @@ export function Progress({ onWeight, onLift }: { onWeight: () => void; onLift: (
                   <span className="eyebrow" style={{ color: 'var(--gold)' }}>Coach</span>
                   {noteFor(w.id) ? <p style={{ margin: 0, lineHeight: 1.45 }}>{noteFor(w.id)!.text}</p> : <span className="small muted">{w.hr ? 'No note yet.' : 'Your note arrives once heart rate syncs, or 45 min after you finish.'}</span>}
                   <button className="btn subtle" style={{ height: 38, alignSelf: 'flex-start' }} disabled={busy === w.id} onClick={() => ask(w.id, () => coachNote(w.id, !!noteFor(w.id)))}>{busy === w.id ? 'Thinking…' : noteFor(w.id) ? 'Rewrite note' : 'Get coach note now'}</button>
+                  {msg?.key === w.id && <span className={`small ${msg.bad ? 'warn' : 'up'}`} role="status">{msg.text}</span>}
                 </div>
                 {w.hr && (
                   <div className="col" style={{ gap: 4 }}>

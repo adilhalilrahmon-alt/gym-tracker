@@ -177,20 +177,31 @@ export async function syncAllNow() {
 }
 
 // ---------- Coach, notifications, avatar ----------
-export async function coachNote(workoutId: string, force = false): Promise<string> {
-  const { text } = await callGoogle2({ action: 'coach', workoutId, force });
+/** A sync that starts after now, so it sees anything the server just wrote (waits out one already running). */
+async function freshSync() {
+  if (running) await running.catch(() => undefined);
   await syncNow();
+}
+
+export async function coachNote(workoutId: string, force = false): Promise<string> {
+  await freshSync(); // the server can only comment on workouts it has, so upload first
+  const { text } = await callGoogle2({ action: 'coach', workoutId, force });
+  if (!text) throw new Error("The cloud doesn't have this workout yet. Check you're signed in under Settings, then try again.");
+  await freshSync();
   return text;
 }
 export async function weeklyNow(): Promise<string> {
+  await freshSync();
   const { text } = await callGoogle2({ action: 'weekly' });
-  await syncNow();
+  if (!text) throw new Error('No review came back. Try again in a minute.');
+  await freshSync();
   return text;
 }
 /** One-off question about your own training data. The answer is saved with your coach notes. */
 export async function askCoach(question: string): Promise<string> {
+  await freshSync();
   const { text } = await callGoogle2({ action: 'ask', question });
-  await syncNow();
+  await freshSync();
   return text;
 }
 export async function avatarFromPhoto(image: string) {
@@ -199,6 +210,7 @@ export async function avatarFromPhoto(image: string) {
 }
 async function callGoogle2(body: Record<string, unknown>) {
   if (!client) throw new Error('Cloud sync is not set up yet');
+  if (!status.email) throw new Error('Sign in under Settings → Cloud backup to use the coach.');
   const { data, error } = await client.functions.invoke('google-callback', { body });
   if (error) {
     let msg = error.message;
