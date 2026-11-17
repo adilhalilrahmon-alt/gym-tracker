@@ -287,16 +287,24 @@ async function settingsOf(userId: string): Promise<Settings> {
 }
 const notifyOn = (s: Settings, k: string) => s.notify?.[k] !== false;
 
+// The model thinks before it writes, and thinking counts against max_tokens. The caller's number is
+// the length of the answer we want; the request allows room for thinking on top of it.
 async function claude(system: string, content: unknown[], maxTokens = 400): Promise<string> {
   if (!ANTHROPIC_KEY) throw new Error('no_ai_key');
-  const res = await fetch('https://api.anthropic.com/v1/messages', {
-    method: 'POST',
-    headers: { 'x-api-key': ANTHROPIC_KEY, 'anthropic-version': '2023-06-01', 'content-type': 'application/json' },
-    body: JSON.stringify({ model: MODEL, max_tokens: maxTokens, system, messages: [{ role: 'user', content }] }),
-  });
-  const body = await res.json();
-  if (!res.ok) throw new Error(`AI: ${body.error?.message ?? res.status}`);
-  return (body.content ?? []).filter((b: DP) => b.type === 'text').map((b: DP) => b.text).join('').trim();
+  const call = async (budget: number) => {
+    const res = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: { 'x-api-key': ANTHROPIC_KEY, 'anthropic-version': '2023-06-01', 'content-type': 'application/json' },
+      body: JSON.stringify({ model: MODEL, max_tokens: budget, system, messages: [{ role: 'user', content }] }),
+    });
+    const body = await res.json();
+    if (!res.ok) throw new Error(`AI: ${body.error?.message ?? res.status}`);
+    return { text: (body.content ?? []).filter((b: DP) => b.type === 'text').map((b: DP) => b.text).join('').trim(), cut: body.stop_reason === 'max_tokens' };
+  };
+  let r = await call(maxTokens + 6000);
+  if (r.cut || !r.text) r = await call(maxTokens + 16000); // ran out while thinking: once more with more room
+  if (!r.text) throw new Error('AI: empty reply');
+  return r.text;
 }
 
 const e1rm = (w: number, r: number) => (r <= 1 ? w : w * (1 + r / 30));
